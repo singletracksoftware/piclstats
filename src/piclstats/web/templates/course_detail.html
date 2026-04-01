@@ -198,7 +198,11 @@
 {% if division_stats %}
 <script>
 const stats = {{ division_stats | tojson }};
-const filtered = stats.filter(d => d.avg_pace_per_lap_secs && d.avg_pace_per_lap_secs > 0);
+const filtered = stats.filter(d =>
+    d.avg_pace_per_lap_secs && d.avg_pace_per_lap_secs > 0 && d.avg_pace_per_lap_secs < 2400
+    && !d.division.startsWith('Single Lap')
+    && d.division !== '9th Grade'
+);
 const labels = filtered.map(d => `${d.division} ${d.gender || ''}`);
 const paceData = filtered.map(d => d.avg_pace_per_lap_secs);
 

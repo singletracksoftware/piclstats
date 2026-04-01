@@ -494,6 +494,7 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
             AND (dl.gender = r.gender OR dl.gender IS NULL)
             AND dl.season IS NULL
         WHERE e.course_id = :cid AND r.place IS NOT NULL AND r.total_time IS NOT NULL
+          AND r.total_time < interval '2 hours'
           {season_filter}
         GROUP BY r.division, r.gender
         ORDER BY r.division, r.gender
