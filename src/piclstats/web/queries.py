@@ -183,8 +183,9 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
         JOIN riders ri ON r.rider_id = ri.id
         LEFT JOIN division_laps dl ON dl.course_id = e.course_id
             AND dl.division = r.division
-            AND (dl.gender = r.gender OR dl.gender IS NULL)
+            AND (dl.gender = r.gender OR (dl.gender IS NULL AND r.gender IS NULL))
             AND dl.season IS NULL
+            AND dl.loop_type IS NOT NULL
         LEFT JOIN course_loops cl ON cl.course_id = e.course_id
             AND cl.loop_type = dl.loop_type
         WHERE r.rider_id = ANY(:ids)
@@ -516,8 +517,9 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
         LEFT JOIN rider_aliases ra ON ra.rider_id = ri.id
         LEFT JOIN division_laps dl ON dl.course_id = e.course_id
             AND dl.division = r.division
-            AND (dl.gender = r.gender OR dl.gender IS NULL)
+            AND (dl.gender = r.gender OR (dl.gender IS NULL AND r.gender IS NULL))
             AND dl.season IS NULL
+            AND dl.loop_type IS NOT NULL
         LEFT JOIN course_loops cl ON cl.course_id = e.course_id
             AND cl.loop_type = dl.loop_type
         WHERE e.course_id = :cid AND r.place IS NOT NULL AND r.total_time IS NOT NULL
