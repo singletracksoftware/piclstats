@@ -99,6 +99,18 @@ courses = Table(
     Column("notes", Text),
 )
 
+course_loops = Table(
+    "course_loops",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("course_id", Integer, nullable=False),
+    Column("loop_type", Text, nullable=False),  # 'MS' or 'HS'
+    Column("distance_miles", Float),
+    Column("elevation_ft", Float),
+    UniqueConstraint("course_id", "loop_type", name="uq_course_loop"),
+    Index("idx_course_loops_course", "course_id"),
+)
+
 division_laps = Table(
     "division_laps",
     metadata,

@@ -476,6 +476,9 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
 
     division_stats = session.execute(text(f"""
         SELECT r.division, r.gender,
+               dl.loop_type,
+               dl.lap_count,
+               cl.distance_miles AS loop_distance,
                count(DISTINCT COALESCE(ra.canonical_id, ri.id)) AS riders,
                count(r.id) AS results,
                round(avg(r.place)::numeric, 1) AS avg_place,
@@ -484,7 +487,11 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
                min(r.total_time) AS fastest_time,
                round(avg(
                    EXTRACT(EPOCH FROM r.total_time) / NULLIF(dl.lap_count, 0)
-               )::numeric, 1) AS avg_pace_per_lap_secs
+               )::numeric, 1) AS avg_pace_per_lap_secs,
+               round(avg(
+                   (EXTRACT(EPOCH FROM r.total_time) / 60.0)
+                   / NULLIF(dl.lap_count * cl.distance_miles, 0)
+               )::numeric, 1) AS avg_min_per_mile
         FROM results r
         JOIN events e ON r.event_id = e.id
         JOIN riders ri ON r.rider_id = ri.id
@@ -493,10 +500,12 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
             AND dl.division = r.division
             AND (dl.gender = r.gender OR dl.gender IS NULL)
             AND dl.season IS NULL
+        LEFT JOIN course_loops cl ON cl.course_id = e.course_id
+            AND cl.loop_type = dl.loop_type
         WHERE e.course_id = :cid AND r.place IS NOT NULL AND r.total_time IS NOT NULL
           AND r.total_time < interval '2 hours'
           {season_filter}
-        GROUP BY r.division, r.gender
+        GROUP BY r.division, r.gender, dl.loop_type, dl.lap_count, cl.distance_miles
         ORDER BY r.division, r.gender
     """), params).all()
 
