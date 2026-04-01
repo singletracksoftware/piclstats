@@ -155,34 +155,32 @@ def _detect_field_layout(data_fields: list[str], sample_row: list[str]) -> dict[
     layout["school"] = school_idx
     layout["points"] = points_idx
 
-    # Find TimeOrStatus — scan from end
+    # Find TimeOrStatus — scan entire field list from end
     time_idx = -1
-    for i in range(n - 1, points_idx, -1):
+    for i in range(n - 1, 3, -1):
         if "TimeOrStatus" in data_fields[i]:
             time_idx = i
             break
     if time_idx < 0:
-        # Fallback: last field before trailing flags
-        for i in range(n - 1, points_idx, -1):
+        for i in range(n - 1, 3, -1):
             df = data_fields[i]
-            if "TIME" in df.upper() and "LAP" not in df.upper() and "DISPLAY" not in df.upper():
+            if "TIME" in df.upper() and "LAP" not in df.upper() and "DISPLAY" not in df.upper() and "T20" not in df.upper():
                 time_idx = i
                 break
     layout["time"] = time_idx
 
-    # Find penalty — look for TIME20 or PEN between points and time
+    # Find penalty — look for TIME20 or PEN anywhere between CLUB and end
     penalty_idx = -1
-    for i in range(points_idx + 1, time_idx if time_idx > 0 else n):
+    for i in range(4, n):
         df = data_fields[i]
-        if "TIME20" in df.upper() or "PEN" in df.upper() or (df.startswith("if([T20]") ):
+        if "TIME20" in df.upper() or "PEN" in df.upper() or df.startswith("if([T20]"):
             penalty_idx = i
             break
     layout["penalty"] = penalty_idx
 
-    # Laps are DisplayLapTime or TIME101/102/etc between points and penalty/time
+    # Laps — scan entire field list for LapTime/TIME10x patterns
     lap_num = 0
-    end_of_laps = penalty_idx if penalty_idx > 0 else (time_idx if time_idx > 0 else n)
-    for i in range(points_idx + 1, end_of_laps):
+    for i in range(4, n):
         df = data_fields[i]
         if "LapTime" in df or "TIME10" in df:
             lap_num += 1
