@@ -97,8 +97,8 @@ DIVISION_PROFILES = [
 
 # Default loop distances (can be overridden per course later)
 DEFAULT_LOOP_DISTANCES = {
-    "MS": 1.0,   # ~1 mile
-    "HS": 1.5,   # ~1.5 miles
+    "MS": 2.0,   # ~2 miles (based on Granite, Hershey, Penn College actuals)
+    "HS": 3.5,   # ~3.5 miles (based on Penn College, Hershey actuals)
 }
 
 # ── Conference lineage ──────────────────────────────────────────────
