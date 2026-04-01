@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Team Search — PICL Stats{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold text-gray-900 mb-6">Team Search</h1>
+
+<form method="get" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <div class="grid md:grid-cols-3 gap-4">
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Team Name</label>
+            <input type="text" name="q" value="{{ q }}" placeholder="Search teams/clubs…"
+                   class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm focus:ring-picl-500 focus:border-picl-500">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Season</label>
+            <select name="season" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm">
+                <option value="">All Seasons</option>
+                {% for s in seasons %}
+                <option value="{{ s }}" {{ 'selected' if s == season }}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="w-full bg-picl-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-picl-700">
+                Search
+            </button>
+        </div>
+    </div>
+</form>
+
+{% if q %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    {% if results %}
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b bg-gray-50">
+                <th class="px-6 py-3">Team</th>
+                <th class="px-6 py-3 text-right">Riders</th>
+                <th class="px-6 py-3 text-right">Races</th>
+                <th class="px-6 py-3 text-right">Avg Points</th>
+                <th class="px-6 py-3 text-right">Avg Place</th>
+                <th class="px-6 py-3 text-right">Seasons</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for t in results %}
+            <tr class="hover:bg-picl-50 transition-colors">
+                <td class="px-6 py-3">
+                    <a href="/team/{{ t.team }}" class="text-picl-700 font-medium hover:underline">{{ t.team }}</a>
+                </td>
+                <td class="px-6 py-3 text-right font-mono">{{ t.rider_count }}</td>
+                <td class="px-6 py-3 text-right font-mono">{{ t.race_count }}</td>
+                <td class="px-6 py-3 text-right font-mono font-medium">{{ t.avg_points or '—' }}</td>
+                <td class="px-6 py-3 text-right font-mono">{{ t.avg_place or '—' }}</td>
+                <td class="px-6 py-3 text-right text-gray-500">{{ t.seasons_active }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="px-6 py-12 text-center text-gray-400">No teams found matching "{{ q }}"</div>
+    {% endif %}
+</div>
+{% else %}
+<div class="text-center py-12 text-gray-400">Enter a name to search for teams</div>
+{% endif %}
+{% endblock %}

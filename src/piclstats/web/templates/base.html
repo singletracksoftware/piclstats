@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-50">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}PICL Stats{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        picl: {
+                            50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0',
+                            500: '#22c55e', 600: '#16a34a', 700: '#15803d',
+                            800: '#166534', 900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full">
+    <nav class="bg-picl-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="text-white font-bold text-xl tracking-tight">
+                        PICL Stats
+                    </a>
+                    <div class="hidden md:flex space-x-4">
+                        <a href="/" class="text-picl-200 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                        <a href="/riders" class="text-picl-200 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Riders</a>
+                        <a href="/teams" class="text-picl-200 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Teams</a>
+                        <a href="/leaderboard" class="text-picl-200 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Leaderboard</a>
+                    </div>
+                </div>
+                <div class="text-picl-200 text-xs">PA Interscholastic Cycling League</div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-gray-100 border-t mt-12">
+        <div class="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-gray-400">
+            PICL Stats &mdash; Race data sourced from pamtb.org &bull; Not affiliated with NICA or PAMTB
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

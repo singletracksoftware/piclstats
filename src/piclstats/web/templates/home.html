@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}PICL Stats — Dashboard{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
+    <p class="mt-1 text-sm text-gray-500">PA Interscholastic Cycling League — Race Results & Analytics</p>
+</div>
+
+<!-- Stats cards -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+    <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+        <div class="text-2xl font-bold text-picl-700">{{ stats.seasons }}</div>
+        <div class="text-xs text-gray-500 mt-1">Seasons</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+        <div class="text-2xl font-bold text-picl-700">{{ stats.events }}</div>
+        <div class="text-xs text-gray-500 mt-1">Events</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+        <div class="text-2xl font-bold text-picl-700">{{ "{:,}".format(stats.results) }}</div>
+        <div class="text-xs text-gray-500 mt-1">Race Results</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+        <div class="text-2xl font-bold text-picl-700">{{ "{:,}".format(stats.riders) }}</div>
+        <div class="text-xs text-gray-500 mt-1">Riders</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+        <div class="text-2xl font-bold text-picl-700">{{ "{:,}".format(stats.teams) }}</div>
+        <div class="text-xs text-gray-500 mt-1">Teams</div>
+    </div>
+</div>
+
+<!-- Quick search -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Search</h2>
+    <div class="grid md:grid-cols-2 gap-4">
+        <form action="/riders" method="get" class="flex gap-2">
+            <input type="text" name="q" placeholder="Search riders by name…"
+                   class="flex-1 rounded-lg border-gray-300 border px-4 py-2 text-sm focus:ring-picl-500 focus:border-picl-500">
+            <button type="submit" class="bg-picl-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-picl-700">
+                Search Riders
+            </button>
+        </form>
+        <form action="/teams" method="get" class="flex gap-2">
+            <input type="text" name="q" placeholder="Search teams/clubs…"
+                   class="flex-1 rounded-lg border-gray-300 border px-4 py-2 text-sm focus:ring-picl-500 focus:border-picl-500">
+            <button type="submit" class="bg-picl-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-picl-700">
+                Search Teams
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid lg:grid-cols-2 gap-8">
+    <!-- Top Riders -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">Top Riders (by Avg Points)</h2>
+            <a href="/leaderboard" class="text-picl-600 text-sm hover:underline">View all &rarr;</a>
+        </div>
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
+                    <th class="pb-2">#</th>
+                    <th class="pb-2">Rider</th>
+                    <th class="pb-2">Team</th>
+                    <th class="pb-2 text-right">Avg Pts</th>
+                    <th class="pb-2 text-right">Races</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for r in top_riders %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2 text-gray-400">{{ loop.index }}</td>
+                    <td class="py-2">
+                        <a href="/rider/{{ r.rider_id }}" class="text-picl-700 font-medium hover:underline">{{ r.name }}</a>
+                        <span class="text-xs text-gray-400 ml-1">{{ r.division or '' }}</span>
+                    </td>
+                    <td class="py-2 text-gray-600 text-xs">{{ r.team or '' }}</td>
+                    <td class="py-2 text-right font-mono font-medium">{{ r.avg_points }}</td>
+                    <td class="py-2 text-right text-gray-500">{{ r.races }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Top Teams -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">Top Teams (by Avg Points)</h2>
+            <a href="/leaderboard?view=teams" class="text-picl-600 text-sm hover:underline">View all &rarr;</a>
+        </div>
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
+                    <th class="pb-2">#</th>
+                    <th class="pb-2">Team</th>
+                    <th class="pb-2 text-right">Riders</th>
+                    <th class="pb-2 text-right">Avg Pts</th>
+                    <th class="pb-2 text-right">Total Pts</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for t in top_teams %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2 text-gray-400">{{ loop.index }}</td>
+                    <td class="py-2">
+                        <a href="/team/{{ t.team }}" class="text-picl-700 font-medium hover:underline">{{ t.team }}</a>
+                    </td>
+                    <td class="py-2 text-right text-gray-500">{{ t.riders }}</td>
+                    <td class="py-2 text-right font-mono font-medium">{{ t.avg_points }}</td>
+                    <td class="py-2 text-right font-mono text-gray-600">{{ "{:,}".format(t.total_points or 0) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

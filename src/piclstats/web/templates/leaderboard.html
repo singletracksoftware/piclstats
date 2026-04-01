@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard — PICL Stats{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold text-gray-900 mb-6">Leaderboard</h1>
+
+<!-- Filters -->
+<form method="get" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <div class="grid md:grid-cols-6 gap-4">
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">View</label>
+            <select name="view" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm"
+                    onchange="this.form.submit()">
+                <option value="riders" {{ 'selected' if view == 'riders' }}>Riders</option>
+                <option value="teams" {{ 'selected' if view == 'teams' }}>Teams</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Season</label>
+            <select name="season" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm">
+                <option value="">All Seasons</option>
+                {% for s in seasons %}
+                <option value="{{ s }}" {{ 'selected' if s == season }}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if view == 'riders' %}
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Division</label>
+            <select name="division" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm">
+                <option value="">All Divisions</option>
+                {% for d in divisions %}
+                <option value="{{ d }}" {{ 'selected' if d == division }}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Gender</label>
+            <select name="gender" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm">
+                <option value="">All</option>
+                <option value="Male" {{ 'selected' if gender == 'Male' }}>Male</option>
+                <option value="Female" {{ 'selected' if gender == 'Female' }}>Female</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Rank By</label>
+            <select name="metric" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm">
+                <option value="avg_points" {{ 'selected' if metric == 'avg_points' }}>Avg Points</option>
+                <option value="total_points" {{ 'selected' if metric == 'total_points' }}>Total Points</option>
+                <option value="avg_place" {{ 'selected' if metric == 'avg_place' }}>Avg Place</option>
+                <option value="best_place" {{ 'selected' if metric == 'best_place' }}>Best Place</option>
+                <option value="races" {{ 'selected' if metric == 'races' }}>Most Races</option>
+            </select>
+        </div>
+        {% endif %}
+        <div class="flex items-end">
+            <button type="submit" class="w-full bg-picl-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-picl-700">
+                Apply
+            </button>
+        </div>
+    </div>
+</form>
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    {% if view == 'teams' %}
+    <!-- Team leaderboard -->
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b bg-gray-50">
+                <th class="px-4 py-3 w-12">#</th>
+                <th class="px-4 py-3">Team</th>
+                <th class="px-4 py-3 text-right">Riders</th>
+                <th class="px-4 py-3 text-right">Races</th>
+                <th class="px-4 py-3 text-right">Avg Pts</th>
+                <th class="px-4 py-3 text-right">Avg Place</th>
+                <th class="px-4 py-3 text-right">Best Place</th>
+                <th class="px-4 py-3 text-right">Total Pts</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for t in results %}
+            <tr class="hover:bg-picl-50 transition-colors">
+                <td class="px-4 py-3 text-gray-400 font-mono">{{ loop.index }}</td>
+                <td class="px-4 py-3">
+                    <a href="/team/{{ t.team }}{% if season %}?season={{ season }}{% endif %}" class="text-picl-700 font-medium hover:underline">{{ t.team }}</a>
+                </td>
+                <td class="px-4 py-3 text-right font-mono">{{ t.riders }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ t.races }}</td>
+                <td class="px-4 py-3 text-right font-mono font-medium">{{ t.avg_points or '—' }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ t.avg_place or '—' }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ t.best_place or '—' }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ "{:,}".format(t.total_points or 0) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <!-- Rider leaderboard -->
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b bg-gray-50">
+                <th class="px-4 py-3 w-12">#</th>
+                <th class="px-4 py-3">Rider</th>
+                <th class="px-4 py-3">Team</th>
+                <th class="px-4 py-3">Division</th>
+                <th class="px-4 py-3 text-right">Races</th>
+                <th class="px-4 py-3 text-right">Avg Pts</th>
+                <th class="px-4 py-3 text-right">Avg Place</th>
+                <th class="px-4 py-3 text-right">Best</th>
+                <th class="px-4 py-3 text-right">Total Pts</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for r in results %}
+            <tr class="hover:bg-picl-50 transition-colors">
+                <td class="px-4 py-3 text-gray-400 font-mono">{{ loop.index }}</td>
+                <td class="px-4 py-3">
+                    <a href="/rider/{{ r.rider_id }}" class="text-picl-700 font-medium hover:underline">{{ r.name }}</a>
+                </td>
+                <td class="px-4 py-3 text-gray-600 text-xs">
+                    {% if r.team %}<a href="/team/{{ r.team }}" class="hover:underline">{{ r.team }}</a>{% endif %}
+                </td>
+                <td class="px-4 py-3 text-gray-500 text-xs">{{ r.division or '' }} {{ r.gender or '' }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ r.races }}</td>
+                <td class="px-4 py-3 text-right font-mono font-medium">{{ r.avg_points or '—' }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ r.avg_place or '—' }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ r.best_place or '—' }}</td>
+                <td class="px-4 py-3 text-right font-mono">{{ "{:,}".format(r.total_points or 0) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if not results %}
+    <div class="px-6 py-12 text-center text-gray-400">No results match the selected filters</div>
+    {% endif %}
+</div>
+
+{% if view == 'riders' and results %}
+<!-- Chart -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Top {{ results|length }} Riders</h2>
+    <canvas id="leaderChart" height="150"></canvas>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if view == 'riders' and results %}
+<script>
+const data = {{ results | tojson }};
+const metric = '{{ metric }}';
+new Chart(document.getElementById('leaderChart'), {
+    type: 'bar',
+    data: {
+        labels: data.map(r => r.name.length > 15 ? r.name.substring(0, 15) + '…' : r.name),
+        datasets: [{
+            label: metric.replace('_', ' '),
+            data: data.map(r => r[metric]),
+            backgroundColor: 'rgba(22,163,74,0.2)',
+            borderColor: 'rgb(22,163,74)',
+            borderWidth: 1.5,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        indexAxis: 'y',
+        plugins: {legend: {display: false}},
+        scales: {
+            x: {beginAtZero: true},
+        }
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

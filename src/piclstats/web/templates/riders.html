@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Rider Search — PICL Stats{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold text-gray-900 mb-6">Rider Search</h1>
+
+<form method="get" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <div class="grid md:grid-cols-4 gap-4">
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Rider Name</label>
+            <input type="text" name="q" value="{{ q }}" placeholder="Search by name…"
+                   class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm focus:ring-picl-500 focus:border-picl-500">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Team</label>
+            <select name="team" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm focus:ring-picl-500 focus:border-picl-500">
+                <option value="">All Teams</option>
+                {% for t in teams %}
+                <option value="{{ t }}" {{ 'selected' if t == team }}>{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Season</label>
+            <select name="season" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm focus:ring-picl-500 focus:border-picl-500">
+                <option value="">All Seasons</option>
+                {% for s in seasons %}
+                <option value="{{ s }}" {{ 'selected' if s == season }}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="w-full bg-picl-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-picl-700">
+                Search
+            </button>
+        </div>
+    </div>
+</form>
+
+{% if q %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    {% if results %}
+    <div class="px-6 py-3 border-b bg-gray-50 text-sm text-gray-500">
+        {{ results|length }} rider{{ 's' if results|length != 1 }} found
+    </div>
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b bg-gray-50">
+                <th class="px-6 py-3">Rider</th>
+                <th class="px-6 py-3">Team</th>
+                <th class="px-6 py-3 text-right">Races</th>
+                <th class="px-6 py-3 text-right">Avg Points</th>
+                <th class="px-6 py-3 text-right">Avg Place</th>
+                <th class="px-6 py-3 text-right">Seasons</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for r in results %}
+            <tr class="hover:bg-picl-50 transition-colors">
+                <td class="px-6 py-3">
+                    <a href="/rider/{{ r.id }}" class="text-picl-700 font-medium hover:underline">{{ r.name }}</a>
+                </td>
+                <td class="px-6 py-3 text-gray-600">
+                    {% if r.team %}
+                    <a href="/team/{{ r.team }}" class="hover:underline">{{ r.team }}</a>
+                    {% else %}&mdash;{% endif %}
+                </td>
+                <td class="px-6 py-3 text-right font-mono">{{ r.race_count }}</td>
+                <td class="px-6 py-3 text-right font-mono font-medium">{{ r.avg_points or '—' }}</td>
+                <td class="px-6 py-3 text-right font-mono">{{ r.avg_place or '—' }}</td>
+                <td class="px-6 py-3 text-right text-gray-500">{{ r.first_season }}{% if r.first_season != r.last_season %}–{{ r.last_season }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="px-6 py-12 text-center text-gray-400">No riders found matching "{{ q }}"</div>
+    {% endif %}
+</div>
+{% else %}
+<div class="text-center py-12 text-gray-400">Enter a name to search for riders</div>
+{% endif %}
+{% endblock %}

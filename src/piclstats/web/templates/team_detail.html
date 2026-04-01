@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}{{ team_name }} — PICL Stats{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-6">
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ team_name }}</h1>
+            <div class="mt-2 flex items-center gap-2 flex-wrap">
+                <a href="/team/{{ team_name }}" class="px-3 py-1 rounded-full text-xs font-medium
+                    {{ 'bg-picl-600 text-white' if not season else 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                    All Seasons
+                </a>
+                {% for s in seasons_available %}
+                <a href="/team/{{ team_name }}?season={{ s }}" class="px-3 py-1 rounded-full text-xs font-medium
+                    {{ 'bg-picl-600 text-white' if season == s else 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                    {{ s }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <a href="/teams?q={{ team_name }}" class="text-sm text-gray-400 hover:text-gray-600">&larr; Back</a>
+    </div>
+</div>
+
+<!-- Division summary -->
+<div class="grid md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+    {% for d in division_summary %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div class="text-sm font-semibold text-gray-700">{{ d.division or 'Unknown' }} {{ d.gender or '' }}</div>
+        <div class="mt-2 grid grid-cols-3 gap-2 text-xs">
+            <div>
+                <div class="text-gray-400">Riders</div>
+                <div class="font-mono font-medium text-sm">{{ d.riders }}</div>
+            </div>
+            <div>
+                <div class="text-gray-400">Avg Pts</div>
+                <div class="font-mono font-medium text-sm">{{ d.avg_points or '—' }}</div>
+            </div>
+            <div>
+                <div class="text-gray-400">Avg Place</div>
+                <div class="font-mono font-medium text-sm">{{ d.avg_place or '—' }}</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Charts -->
+<div class="grid lg:grid-cols-2 gap-8 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Team Performance by Event</h2>
+        <canvas id="teamEventChart" height="200"></canvas>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Participation by Event</h2>
+        <canvas id="teamParticipationChart" height="200"></canvas>
+    </div>
+</div>
+
+<!-- Roster -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="px-6 py-3 border-b bg-gray-50">
+        <h2 class="text-lg font-semibold text-gray-900">
+            Roster
+            <span class="text-sm font-normal text-gray-400">({{ roster|length }} riders)</span>
+        </h2>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b bg-gray-50">
+                    <th class="px-4 py-3">Rider</th>
+                    <th class="px-4 py-3">Division</th>
+                    <th class="px-4 py-3">Gender</th>
+                    <th class="px-4 py-3 text-right">Races</th>
+                    <th class="px-4 py-3 text-right">Avg Pts</th>
+                    <th class="px-4 py-3 text-right">Avg Place</th>
+                    <th class="px-4 py-3 text-right">Best Place</th>
+                    <th class="px-4 py-3 text-right">Total Pts</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for r in roster %}
+                <tr class="hover:bg-picl-50 transition-colors">
+                    <td class="px-4 py-2">
+                        <a href="/rider/{{ r.id }}" class="text-picl-700 font-medium hover:underline">{{ r.name }}</a>
+                    </td>
+                    <td class="px-4 py-2 text-gray-600">{{ r.division or '—' }}</td>
+                    <td class="px-4 py-2 text-gray-500 text-xs">{{ r.gender or '' }}</td>
+                    <td class="px-4 py-2 text-right font-mono">{{ r.races }}</td>
+                    <td class="px-4 py-2 text-right font-mono font-medium">{{ r.avg_points or '—' }}</td>
+                    <td class="px-4 py-2 text-right font-mono">{{ r.avg_place or '—' }}</td>
+                    <td class="px-4 py-2 text-right font-mono">{{ r.best_place or '—' }}</td>
+                    <td class="px-4 py-2 text-right font-mono">{{ r.total_points or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const events = {{ event_performance | tojson }};
+
+const labels = events.map(e => {
+    const name = e.event_name.length > 25 ? e.event_name.substring(0, 25) + '…' : e.event_name;
+    return `${e.season} #${e.event_order || '?'}`;
+});
+
+new Chart(document.getElementById('teamEventChart'), {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: [
+            {
+                label: 'Avg Points',
+                data: events.map(e => e.avg_points),
+                borderColor: 'rgb(16,185,129)',
+                backgroundColor: 'rgba(16,185,129,0.1)',
+                fill: true,
+                tension: 0.3,
+                yAxisID: 'y',
+            },
+            {
+                label: 'Avg Place',
+                data: events.map(e => e.avg_place),
+                borderColor: 'rgb(99,102,241)',
+                borderDash: [5, 5],
+                tension: 0.3,
+                yAxisID: 'y1',
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        interaction: {mode: 'index', intersect: false},
+        scales: {
+            y: {position: 'left', title: {display: true, text: 'Avg Points'}},
+            y1: {position: 'right', reverse: true, title: {display: true, text: 'Avg Place'},
+                 grid: {drawOnChartArea: false}},
+            x: {ticks: {maxRotation: 45, font: {size: 10}}}
+        }
+    }
+});
+
+new Chart(document.getElementById('teamParticipationChart'), {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: 'Riders',
+            data: events.map(e => e.riders),
+            backgroundColor: 'rgba(16,185,129,0.2)',
+            borderColor: 'rgb(16,185,129)',
+            borderWidth: 1.5,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {legend: {display: false}},
+        scales: {
+            y: {beginAtZero: true, title: {display: true, text: 'Riders'}},
+            x: {ticks: {maxRotation: 45, font: {size: 10}}}
+        }
+    }
+});
+</script>
+{% endblock %}

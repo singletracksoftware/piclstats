@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}{{ info.name }} — PICL Stats{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-8">
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ info.name }}</h1>
+            <div class="mt-1 flex items-center gap-3 text-sm text-gray-500">
+                {% if info.team %}
+                <a href="/team/{{ info.team }}" class="text-picl-600 hover:underline">{{ info.team }}</a>
+                {% endif %}
+                {% if info.school %}
+                <span>&bull; {{ info.school }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <a href="/riders?q={{ info.name }}" class="text-sm text-gray-400 hover:text-gray-600">&larr; Back to search</a>
+    </div>
+</div>
+
+<!-- Season summary cards -->
+<div class="grid md:grid-cols-{{ season_stats|length if season_stats|length <= 4 else 4 }} gap-4 mb-8">
+    {% for ss in season_stats %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-lg font-bold text-picl-700">{{ ss.season }}</span>
+            <span class="text-xs bg-picl-100 text-picl-700 px-2 py-0.5 rounded-full">{{ ss.primary_division }}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+                <div class="text-gray-400 text-xs">Races</div>
+                <div class="font-mono font-medium">{{ ss.races }}</div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">Avg Points</div>
+                <div class="font-mono font-medium">{{ ss.avg_points or '—' }}</div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">Best Place</div>
+                <div class="font-mono font-medium">{{ ss.best_place or '—' }}</div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">Total Points</div>
+                <div class="font-mono font-medium">{{ ss.total_points or '—' }}</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Charts row -->
+<div class="grid lg:grid-cols-2 gap-8 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Points Trend</h2>
+        <canvas id="pointsChart" height="200"></canvas>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Placement Trend</h2>
+        <canvas id="placeChart" height="200"></canvas>
+    </div>
+</div>
+
+<!-- Percentile chart -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-1">Field Percentile</h2>
+    <p class="text-xs text-gray-400 mb-4">How this rider ranks relative to others in the same category per race (higher = better)</p>
+    <canvas id="percentileChart" height="120"></canvas>
+</div>
+
+<!-- Race history table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="px-6 py-3 border-b bg-gray-50">
+        <h2 class="text-lg font-semibold text-gray-900">Race History</h2>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b bg-gray-50">
+                    <th class="px-4 py-3">Season</th>
+                    <th class="px-4 py-3">Event</th>
+                    <th class="px-4 py-3">Category</th>
+                    <th class="px-4 py-3">Conference</th>
+                    <th class="px-4 py-3 text-right">Place</th>
+                    <th class="px-4 py-3 text-right">Points</th>
+                    <th class="px-4 py-3 text-right">Time</th>
+                    <th class="px-4 py-3 text-right">Lap 1</th>
+                    <th class="px-4 py-3 text-right">Lap 2</th>
+                    <th class="px-4 py-3 text-right">Lap 3</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for r in races %}
+                <tr class="hover:bg-picl-50 transition-colors {% if r.status != 'OK' %}text-gray-400{% endif %}">
+                    <td class="px-4 py-2 font-medium">{{ r.season }}</td>
+                    <td class="px-4 py-2 max-w-xs truncate" title="{{ r.event_name }}">{{ r.event_name }}</td>
+                    <td class="px-4 py-2 text-gray-600">{{ r.category }}</td>
+                    <td class="px-4 py-2 text-gray-500 text-xs">{{ r.conference or '' }}</td>
+                    <td class="px-4 py-2 text-right font-mono font-medium">
+                        {% if r.place %}{{ r.place }}{% else %}<span class="text-red-400">{{ r.status }}</span>{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-right font-mono">{{ r.points or '—' }}</td>
+                    <td class="px-4 py-2 text-right font-mono text-xs">{{ r.total_time_raw or '—' }}</td>
+                    <td class="px-4 py-2 text-right font-mono text-xs">{{ r.lap1 or '' }}</td>
+                    <td class="px-4 py-2 text-right font-mono text-xs">{{ r.lap2 or '' }}</td>
+                    <td class="px-4 py-2 text-right font-mono text-xs">{{ r.lap3 or '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const races = {{ races | tojson }};
+const percentiles = {{ percentiles | tojson }};
+
+// Color palette per season
+const seasonColors = {
+    2022: {bg: 'rgba(99,102,241,0.15)', border: 'rgb(99,102,241)'},
+    2023: {bg: 'rgba(234,88,12,0.15)', border: 'rgb(234,88,12)'},
+    2024: {bg: 'rgba(16,185,129,0.15)', border: 'rgb(16,185,129)'},
+    2025: {bg: 'rgba(59,130,246,0.15)', border: 'rgb(59,130,246)'},
+};
+const defaultColor = {bg: 'rgba(107,114,128,0.15)', border: 'rgb(107,114,128)'};
+
+// Build labels + data
+const labels = races.map((r, i) => {
+    const name = r.event_name.length > 20 ? r.event_name.substring(0, 20) + '…' : r.event_name;
+    return `${r.season} #${r.event_order || i+1}`;
+});
+const pointsData = races.map(r => r.points);
+const placeData = races.map(r => r.place);
+const bgColors = races.map(r => (seasonColors[r.season] || defaultColor).bg);
+const borderColors = races.map(r => (seasonColors[r.season] || defaultColor).border);
+
+// Points chart
+new Chart(document.getElementById('pointsChart'), {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: 'Points',
+            data: pointsData,
+            backgroundColor: bgColors,
+            borderColor: borderColors,
+            borderWidth: 1.5,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {legend: {display: false}},
+        scales: {
+            y: {beginAtZero: true, title: {display: true, text: 'Points'}},
+            x: {ticks: {maxRotation: 45, font: {size: 10}}}
+        }
+    }
+});
+
+// Place chart (inverted — lower is better)
+new Chart(document.getElementById('placeChart'), {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: 'Place',
+            data: placeData,
+            borderColor: 'rgb(16,185,129)',
+            backgroundColor: 'rgba(16,185,129,0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 5,
+            pointBackgroundColor: borderColors,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {legend: {display: false}},
+        scales: {
+            y: {reverse: true, beginAtZero: false, title: {display: true, text: 'Place (lower = better)'},
+                ticks: {stepSize: 1}},
+            x: {ticks: {maxRotation: 45, font: {size: 10}}}
+        }
+    }
+});
+
+// Percentile chart
+const pctLabels = percentiles.map((p, i) => `${p.season} #${p.event_order || i+1}`);
+const pctData = percentiles.map(p => p.percentile);
+const pctBg = percentiles.map(p => (seasonColors[p.season] || defaultColor).bg);
+const pctBorder = percentiles.map(p => (seasonColors[p.season] || defaultColor).border);
+
+new Chart(document.getElementById('percentileChart'), {
+    type: 'bar',
+    data: {
+        labels: pctLabels,
+        datasets: [{
+            label: 'Percentile',
+            data: pctData,
+            backgroundColor: pctBg,
+            borderColor: pctBorder,
+            borderWidth: 1.5,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {display: false},
+            tooltip: {
+                callbacks: {
+                    afterLabel: (ctx) => {
+                        const p = percentiles[ctx.dataIndex];
+                        return `Place ${p.place} of ${p.field_size} in ${p.category}`;
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {min: 0, max: 100, title: {display: true, text: 'Percentile'}},
+            x: {ticks: {maxRotation: 45, font: {size: 10}}}
+        }
+    }
+});
+</script>
+{% endblock %}
