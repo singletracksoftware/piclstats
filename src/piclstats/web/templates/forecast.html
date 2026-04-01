@@ -141,12 +141,22 @@
                 <table class="w-full text-sm mt-4">
                     <tbody class="divide-y divide-gray-100">
                         <tr class="bg-picl-50">
-                            <td class="py-2 px-3 font-medium" colspan="2">Step 1: Rider's Raw Pace</td>
+                            <td class="py-2 px-3 font-medium" colspan="2">Step 1: Rider's Raw Pace (difficulty-normalized)</td>
                         </tr>
                         <tr>
                             <td class="py-2 px-3 text-gray-600">Weighted avg of last {{ forecast.inputs_summary.recent_races_used }} races</td>
                             <td class="py-2 px-3 text-right font-mono font-medium">{{ forecast.inputs_summary.rider_raw_pace }} min/mi</td>
                         </tr>
+                        {% if forecast.inputs_summary.difficulty_normalized %}
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Climbing adjustment ({{ forecast.inputs_summary.races_with_elevation_data }}/{{ forecast.inputs_summary.recent_races_used }} races with elevation data)</td>
+                            <td class="py-2 px-3 text-right font-mono">× {{ forecast.inputs_summary.avg_difficulty_adjustment }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td class="py-2 px-3 text-gray-400 italic" colspan="2">No elevation data available — using raw pace (add course elevation for better accuracy)</td>
+                        </tr>
+                        {% endif %}
                         <tr>
                             <td class="py-2 px-3 text-gray-600">Consistency (stdev)</td>
                             <td class="py-2 px-3 text-right font-mono">± {{ forecast.inputs_summary.rider_consistency_stdev }} min/mi</td>

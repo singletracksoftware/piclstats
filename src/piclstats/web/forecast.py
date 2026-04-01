@@ -28,6 +28,7 @@ class RaceObservation:
     division: str
     loop_type: str | None
     lap_count: int | None
+    elevation_ft_per_mile: float | None = None  # ft gain / mile for this loop
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,12 @@ DEFAULT_CONFIG: dict = {
     },
     # Minimum races needed to produce a forecast
     "min_races_for_forecast": 2,
+    # Climbing difficulty: % pace impact per 100 ft/mile of elevation gain.
+    # A course with 100 ft/mi more climbing than reference adds this % to pace.
+    "climbing_impact_per_100ft_mile": 0.04,  # 4% slower per 100 ft/mi extra climbing
+    # Reference climbing rate (ft/mile) — used to normalize. Set to avg across
+    # courses once we have data for most of them.
+    "reference_climbing_ft_per_mile": 110.0,
 }
 
 
@@ -107,12 +114,36 @@ class StatisticalForecastModel:
         if not inp.target_paces:
             return None
 
-        # Step 1: Rider's current pace (recency-weighted average)
+        # Step 1: Rider's current pace (recency-weighted, difficulty-normalized)
+        #
+        # Normalize each race's pace to a reference climbing difficulty.
+        # A rider who raced on a hilly course gets credit (pace adjusted down),
+        # a rider on a flat course gets penalized (pace adjusted up).
+        ref_climb = cfg["reference_climbing_ft_per_mile"]
+        climb_impact = cfg["climbing_impact_per_100ft_mile"]
+
         recent = inp.observations[-cfg["recent_race_count"]:]
         decay = cfg["recency_decay"]
         weights = [decay ** (len(recent) - 1 - i) for i in range(len(recent))]
         total_w = sum(weights)
-        rider_pace = sum(o.min_per_mile * w for o, w in zip(recent, weights)) / total_w
+
+        normalized_paces = []
+        difficulty_adjustments = []
+        for o in recent:
+            if o.elevation_ft_per_mile is not None and ref_climb > 0:
+                # Positive diff = harder than reference → rider is better than pace shows
+                diff = o.elevation_ft_per_mile - ref_climb
+                adjustment = 1 + climb_impact * (diff / 100.0)
+                # Normalize: divide out the difficulty to get "what would pace be at reference?"
+                normalized = o.min_per_mile / adjustment
+            else:
+                adjustment = 1.0
+                normalized = o.min_per_mile
+            normalized_paces.append(normalized)
+            difficulty_adjustments.append(adjustment)
+
+        rider_pace = sum(p * w for p, w in zip(normalized_paces, weights)) / total_w
+        avg_difficulty_adj = sum(a * w for a, w in zip(difficulty_adjustments, weights)) / total_w
 
         # Step 2: Fatigue adjustment
         extra_laps = max(0, inp.target_laps - inp.source_laps)
@@ -193,8 +224,15 @@ class StatisticalForecastModel:
         target_avg = mean(sorted_paces) if sorted_paces else 0
         target_med = median(sorted_paces) if sorted_paces else 0
 
+        # Count how many races had difficulty data
+        races_with_elevation = sum(1 for o in recent if o.elevation_ft_per_mile is not None)
+
         inputs_summary = {
             "rider_raw_pace": round(rider_pace, 1),
+            "difficulty_normalized": races_with_elevation > 0,
+            "races_with_elevation_data": races_with_elevation,
+            "avg_difficulty_adjustment": round(avg_difficulty_adj, 3),
+            "reference_climbing": ref_climb,
             "recent_races_used": len(recent),
             "recency_decay": decay,
             "fatigue_extra_laps": extra_laps,

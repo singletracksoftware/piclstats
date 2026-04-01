@@ -616,7 +616,10 @@ def rider_forecast_data(session: Session, rider_id: int) -> dict | None:
                      (EXTRACT(EPOCH FROM r.total_time) / 60.0)
                      / (dl.lap_count * cl.distance_miles)
                  )::numeric, 1)
-            END AS min_per_mile
+            END AS min_per_mile,
+            CASE WHEN cl.distance_miles > 0 AND cl.elevation_ft IS NOT NULL
+                 THEN round((cl.elevation_ft / cl.distance_miles)::numeric, 1)
+            END AS elevation_ft_per_mile
         FROM results r
         JOIN events e ON r.event_id = e.id
         LEFT JOIN division_laps dl ON dl.course_id = e.course_id

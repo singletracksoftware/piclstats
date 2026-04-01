@@ -182,6 +182,7 @@ def rider_forecast(
                         division=r["division"],
                         loop_type=r.get("loop_type"),
                         lap_count=r.get("lap_count"),
+                        elevation_ft_per_mile=r.get("elevation_ft_per_mile"),
                     )
                     for r in rider_data["races"]
                     if r.get("min_per_mile") is not None
