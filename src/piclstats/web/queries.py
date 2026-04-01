@@ -464,11 +464,17 @@ def courses_list(session: Session) -> list[dict]:
 
 def course_detail(session: Session, course_id: int, season: int | None = None) -> dict | None:
     info = session.execute(text("""
-        SELECT id, name, location, distance_miles, elevation_ft, difficulty_score, notes
+        SELECT id, name, location, difficulty_score, notes
         FROM courses WHERE id = :id
     """), {"id": course_id}).one_or_none()
     if not info:
         return None
+
+    loops = session.execute(text("""
+        SELECT loop_type, distance_miles, elevation_ft
+        FROM course_loops WHERE course_id = :id
+        ORDER BY loop_type
+    """), {"id": course_id}).all()
 
     params: dict = {"cid": course_id}
     season_filter = ""
@@ -557,8 +563,11 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
         ORDER BY e.season
     """), {"cid": course_id}).all()
 
+    loops_dict = {r[0]: {"distance_miles": r[1], "elevation_ft": r[2]} for r in loops}
+
     return {
         "info": _serialize(info._mapping),
+        "loops": loops_dict,
         "events": [_serialize(r._mapping) for r in events_at],
         "laps": [_serialize(r._mapping) for r in laps],
         "division_stats": [_serialize(r._mapping) for r in division_stats],

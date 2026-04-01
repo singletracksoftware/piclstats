@@ -27,21 +27,35 @@
 </div>
 
 <!-- Course stats -->
+{% set ms = loops.get('MS', {}) %}
+{% set hs = loops.get('HS', {}) %}
 <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
         <div class="text-gray-400 text-xs">MS Loop</div>
-        <div class="text-2xl font-bold text-blue-600 mt-1">~1.0 mi</div>
+        <div class="text-2xl font-bold text-blue-600 mt-1">
+            {% if ms.distance_miles %}{{ "%.2f"|format(ms.distance_miles) }} mi{% else %}~1.0 mi{% endif %}
+        </div>
+        {% if ms.elevation_ft %}
+        <div class="text-xs text-gray-500 mt-1">{{ ms.elevation_ft|int }} ft gain</div>
+        {% endif %}
         <div class="text-xs text-gray-400 mt-1">6th-8th Grade, MS Advanced</div>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
         <div class="text-gray-400 text-xs">HS Loop</div>
-        <div class="text-2xl font-bold text-red-600 mt-1">~1.5 mi</div>
+        <div class="text-2xl font-bold text-red-600 mt-1">
+            {% if hs.distance_miles %}{{ "%.2f"|format(hs.distance_miles) }} mi{% else %}~1.5 mi{% endif %}
+        </div>
+        {% if hs.elevation_ft %}
+        <div class="text-xs text-gray-500 mt-1">{{ hs.elevation_ft|int }} ft gain</div>
+        {% endif %}
         <div class="text-xs text-gray-400 mt-1">JV3, JV2, JV1, Varsity</div>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <div class="text-gray-400 text-xs">Difficulty Score</div>
+        <div class="text-gray-400 text-xs">Climbing (ft/mi)</div>
         <div class="text-2xl font-bold text-picl-700 mt-1">
-            {% if info.difficulty_score %}{{ "%.1f"|format(info.difficulty_score) }}{% else %}<span class="text-gray-300 text-lg">TBD</span>{% endif %}
+            {% if ms.distance_miles and ms.elevation_ft %}
+                MS {{ (ms.elevation_ft / ms.distance_miles)|int }} / HS {{ (hs.elevation_ft / hs.distance_miles)|int if hs.elevation_ft and hs.distance_miles else '?' }}
+            {% else %}<span class="text-gray-300 text-lg">TBD</span>{% endif %}
         </div>
     </div>
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
