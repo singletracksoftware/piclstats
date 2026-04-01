@@ -565,3 +565,169 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
         "top_riders": [_serialize(r._mapping) for r in top_riders],
         "seasons_available": [r[0] for r in seasons_available],
     }
+
+
+# ── Forecast queries ────────────────────────────────────────────────
+
+
+def rider_forecast_data(session: Session, rider_id: int) -> dict | None:
+    """Get rider info + min/mile per race for forecasting."""
+    # Resolve canonical
+    canonical_id = session.execute(text("""
+        SELECT COALESCE(
+            (SELECT canonical_id FROM rider_aliases WHERE rider_id = :id),
+            :id
+        )
+    """), {"id": rider_id}).scalar()
+
+    group_ids = session.execute(text("""
+        SELECT rider_id FROM rider_aliases WHERE canonical_id = :cid
+        UNION SELECT :cid
+    """), {"cid": canonical_id}).all()
+    all_ids = [r[0] for r in group_ids]
+
+    info = session.execute(text("""
+        SELECT ri.id, ri.name,
+               string_agg(DISTINCT ri2.team, ' / ' ORDER BY ri2.team) AS team
+        FROM riders ri
+        CROSS JOIN riders ri2
+        WHERE ri.id = :cid AND ri2.id = ANY(:ids)
+        GROUP BY ri.id, ri.name
+    """), {"cid": canonical_id, "ids": all_ids}).one_or_none()
+    if not info:
+        return None
+
+    races = session.execute(text("""
+        SELECT
+            e.event_name,
+            e.course_id,
+            e.season,
+            e.event_order,
+            r.division,
+            r.gender,
+            dl.loop_type,
+            dl.lap_count,
+            cl.distance_miles AS loop_distance,
+            CASE WHEN r.total_time IS NOT NULL
+                      AND r.total_time < interval '2 hours'
+                      AND dl.lap_count > 0
+                      AND cl.distance_miles > 0
+                 THEN round((
+                     (EXTRACT(EPOCH FROM r.total_time) / 60.0)
+                     / (dl.lap_count * cl.distance_miles)
+                 )::numeric, 1)
+            END AS min_per_mile
+        FROM results r
+        JOIN events e ON r.event_id = e.id
+        LEFT JOIN division_laps dl ON dl.course_id = e.course_id
+            AND dl.division = r.division
+            AND (dl.gender = r.gender OR (dl.gender IS NULL AND r.gender IS NULL))
+            AND dl.season IS NULL AND dl.loop_type IS NOT NULL
+        LEFT JOIN course_loops cl ON cl.course_id = e.course_id
+            AND cl.loop_type = dl.loop_type
+        WHERE r.rider_id = ANY(:ids)
+          AND r.place IS NOT NULL
+          AND r.status = 'OK'
+        ORDER BY e.season, e.event_order
+    """), {"ids": all_ids}).all()
+
+    # Determine primary division and gender (most recent)
+    valid_races = [r for r in races if r.min_per_mile is not None]
+    primary_division = valid_races[-1].division if valid_races else None
+    gender = valid_races[-1].gender if valid_races else None
+
+    return {
+        "info": _serialize(info._mapping),
+        "canonical_id": canonical_id,
+        "races": [_serialize(r._mapping) for r in races],
+        "primary_division": primary_division,
+        "gender": gender,
+    }
+
+
+def division_pace_distribution(
+    session: Session, division: str, gender: str, season: int | None = None
+) -> dict:
+    """Get min/mile distribution and field sizes for a division."""
+    params: dict = {"division": division, "gender": gender}
+    season_filter = ""
+    if season:
+        season_filter = "AND e.season = :season"
+        params["season"] = season
+
+    # Handle MS Advanced / Middle School Advanced equivalence
+    div_filter = "r.division = :division"
+    if division in ("MS Advanced", "Middle School Advanced"):
+        div_filter = "r.division IN ('MS Advanced', 'Middle School Advanced')"
+
+    rows = session.execute(text(f"""
+        SELECT
+            r.place,
+            count(*) OVER (PARTITION BY r.event_id) AS field_size,
+            round((
+                (EXTRACT(EPOCH FROM r.total_time) / 60.0)
+                / NULLIF(dl.lap_count * cl.distance_miles, 0)
+            )::numeric, 1) AS min_per_mile
+        FROM results r
+        JOIN events e ON r.event_id = e.id
+        LEFT JOIN division_laps dl ON dl.course_id = e.course_id
+            AND dl.division = r.division
+            AND (dl.gender = r.gender OR (dl.gender IS NULL AND r.gender IS NULL))
+            AND dl.season IS NULL AND dl.loop_type IS NOT NULL
+        LEFT JOIN course_loops cl ON cl.course_id = e.course_id
+            AND cl.loop_type = dl.loop_type
+        WHERE {div_filter}
+          AND r.gender = :gender
+          AND r.place IS NOT NULL
+          AND r.total_time IS NOT NULL
+          AND r.total_time < interval '2 hours'
+          AND dl.lap_count > 0 AND cl.distance_miles > 0
+          {season_filter}
+        ORDER BY min_per_mile
+    """), params).all()
+
+    paces = [float(r[2]) for r in rows if r[2] is not None]
+    field_sizes = list({r[1] for r in rows if r[1]})
+
+    return {"paces": paces, "field_sizes": field_sizes}
+
+
+def division_profile_lookup(
+    session: Session, division: str, gender: str
+) -> dict | None:
+    """Get lap count, loop type, and distance for a division."""
+    div_filter = "dl.division = :division"
+    params: dict = {"division": division, "gender": gender}
+    if division in ("MS Advanced", "Middle School Advanced"):
+        div_filter = "dl.division IN ('MS Advanced', 'Middle School Advanced')"
+
+    row = session.execute(text(f"""
+        SELECT DISTINCT dl.lap_count, dl.loop_type, cl.distance_miles
+        FROM division_laps dl
+        JOIN course_loops cl ON cl.course_id = dl.course_id AND cl.loop_type = dl.loop_type
+        WHERE {div_filter}
+          AND (dl.gender = :gender OR (dl.gender IS NULL AND :gender IS NULL))
+          AND dl.season IS NULL
+        LIMIT 1
+    """), params).one_or_none()
+
+    if not row:
+        return None
+    return {"lap_count": row[0], "loop_type": row[1], "loop_miles": float(row[2])}
+
+
+def available_target_divisions(
+    session: Session, source_division: str, gender: str
+) -> list[str]:
+    """Get divisions a rider could be forecast into (same gender, exclude source and single-lap)."""
+    rows = session.execute(text("""
+        SELECT DISTINCT r.division
+        FROM results r
+        WHERE r.gender = :gender
+          AND r.division != :source
+          AND r.division NOT LIKE 'Single Lap%%'
+          AND r.division != '9th Grade'
+          AND r.place IS NOT NULL
+        ORDER BY r.division
+    """), {"gender": gender, "source": source_division}).all()
+    return [r[0] for r in rows]

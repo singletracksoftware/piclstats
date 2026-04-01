@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}Forecast — {{ rider.info.name }} — PICL Stats{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-6">
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Performance Forecast</h1>
+            <div class="mt-2 flex items-center gap-3">
+                <a href="/rider/{{ rider.canonical_id }}" class="text-picl-600 hover:underline text-lg font-semibold">{{ rider.info.name }}</a>
+                {% if rider.primary_division %}
+                <span class="text-xs bg-picl-100 text-picl-700 px-2 py-1 rounded-full">{{ rider.primary_division }}</span>
+                {% endif %}
+                <span class="text-sm text-gray-400">{{ rider.info.team }}</span>
+            </div>
+        </div>
+        <a href="/rider/{{ rider.canonical_id }}" class="text-sm text-gray-400 hover:text-gray-600">&larr; Back to profile</a>
+    </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-8">
+    <!-- Left: Current pace stats + selector -->
+    <div class="lg:col-span-1 space-y-6">
+        <!-- Current pace -->
+        {% set valid_races = rider.races | selectattr('min_per_mile') | list %}
+        {% if valid_races %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Current Pace</h2>
+            <div class="text-center">
+                <div class="text-4xl font-bold text-picl-700">
+                    {{ "%.1f"|format(valid_races[-1].min_per_mile) }}
+                </div>
+                <div class="text-sm text-gray-400 mt-1">min/mile (latest race)</div>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs">Races</div>
+                    <div class="font-mono font-medium">{{ valid_races | length }}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs">Division</div>
+                    <div class="font-mono font-medium text-xs">{{ rider.primary_division }}</div>
+                </div>
+            </div>
+            <!-- Pace sparkline -->
+            <div class="mt-4">
+                <canvas id="paceSparkline" height="60"></canvas>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Division selector -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Predict In Division</h2>
+            <form method="get" class="space-y-3">
+                <select name="target_division" class="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm focus:ring-picl-500 focus:border-picl-500">
+                    <option value="">Select a division…</option>
+                    {% for d in divisions %}
+                    <option value="{{ d }}" {{ 'selected' if d == target_division }}>{{ d }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="w-full bg-picl-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-picl-700 transition-colors">
+                    Predict Performance
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right: Forecast results -->
+    <div class="lg:col-span-2">
+        {% if error %}
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-800">
+            {{ error }}
+        </div>
+
+        {% elif forecast %}
+        <!-- Readiness badge -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+            <div class="flex items-center gap-4">
+                <div class="w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-lg
+                    {% if forecast.readiness_color == 'green' %}bg-green-500
+                    {% elif forecast.readiness_color == 'amber' %}bg-amber-500
+                    {% else %}bg-red-500{% endif %}">
+                    {{ forecast.readiness }}
+                </div>
+                <div class="flex-1">
+                    <div class="text-lg font-semibold text-gray-900">
+                        {{ rider.info.name }} → {{ target_division }}
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">{{ forecast.readiness_detail }}</p>
+                    <div class="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                        <span>Confidence: <strong>{{ forecast.confidence }}</strong></span>
+                        <span>Based on {{ forecast.inputs_summary.recent_races_used }} recent races</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key metrics -->
+        <div class="grid md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+                <div class="text-gray-400 text-xs mb-1">Predicted Place</div>
+                <div class="text-3xl font-bold text-gray-900">
+                    {{ forecast.predicted_place_low }}–{{ forecast.predicted_place_high }}
+                </div>
+                <div class="text-xs text-gray-400 mt-1">out of ~{{ forecast.typical_field_size }}</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+                <div class="text-gray-400 text-xs mb-1">Predicted Percentile</div>
+                <div class="text-3xl font-bold
+                    {% if forecast.predicted_percentile >= 50 %}text-green-600
+                    {% elif forecast.predicted_percentile >= 25 %}text-amber-600
+                    {% else %}text-red-600{% endif %}">
+                    {{ "%.0f"|format(forecast.predicted_percentile) }}%
+                </div>
+                <div class="text-xs text-gray-400 mt-1">higher = better</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center">
+                <div class="text-gray-400 text-xs mb-1">Adjusted Pace</div>
+                <div class="text-3xl font-bold text-picl-700">
+                    {{ forecast.predicted_min_per_mile }}
+                </div>
+                <div class="text-xs text-gray-400 mt-1">min/mile</div>
+            </div>
+        </div>
+
+        <!-- Pace distribution chart -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-1">Where You'd Land</h2>
+            <p class="text-xs text-gray-400 mb-4">Your adjusted pace vs the {{ target_division }} field distribution</p>
+            <canvas id="distributionChart" height="200"></canvas>
+        </div>
+
+        <!-- Show the Math -->
+        <details class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <summary class="px-6 py-4 cursor-pointer text-sm font-semibold text-gray-700 hover:bg-gray-50 select-none">
+                Show the Math
+            </summary>
+            <div class="px-6 pb-6 border-t">
+                <table class="w-full text-sm mt-4">
+                    <tbody class="divide-y divide-gray-100">
+                        <tr class="bg-picl-50">
+                            <td class="py-2 px-3 font-medium" colspan="2">Step 1: Rider's Raw Pace</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Weighted avg of last {{ forecast.inputs_summary.recent_races_used }} races</td>
+                            <td class="py-2 px-3 text-right font-mono font-medium">{{ forecast.inputs_summary.rider_raw_pace }} min/mi</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Consistency (stdev)</td>
+                            <td class="py-2 px-3 text-right font-mono">± {{ forecast.inputs_summary.rider_consistency_stdev }} min/mi</td>
+                        </tr>
+
+                        <tr class="bg-picl-50">
+                            <td class="py-2 px-3 font-medium" colspan="2">Step 2: Fatigue Adjustment</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Source: {{ forecast.inputs_summary.source_division }} ({{ forecast.inputs_summary.source_laps }} laps, {{ forecast.inputs_summary.source_loop }})</td>
+                            <td class="py-2 px-3"></td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Target: {{ forecast.inputs_summary.target_division }} ({{ forecast.inputs_summary.target_laps }} laps, {{ forecast.inputs_summary.target_loop }})</td>
+                            <td class="py-2 px-3"></td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Extra laps: {{ forecast.inputs_summary.fatigue_extra_laps }} → +{{ forecast.inputs_summary.fatigue_pct }}% fatigue</td>
+                            <td class="py-2 px-3 text-right font-mono">× {{ forecast.inputs_summary.fatigue_multiplier }}</td>
+                        </tr>
+
+                        <tr class="bg-picl-50">
+                            <td class="py-2 px-3 font-medium" colspan="2">Step 3: Loop Transition</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">{{ forecast.inputs_summary.loop_transition }}</td>
+                            <td class="py-2 px-3 text-right font-mono">× {{ forecast.inputs_summary.loop_transition_factor }}</td>
+                        </tr>
+
+                        <tr class="bg-picl-50">
+                            <td class="py-2 px-3 font-medium" colspan="2">Step 4: Improvement Credit</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Trend: {{ forecast.inputs_summary.improvement_trend }} min/mi per race</td>
+                            <td class="py-2 px-3 text-right font-mono">- {{ forecast.inputs_summary.improvement_credit }} min/mi</td>
+                        </tr>
+
+                        <tr class="bg-picl-50">
+                            <td class="py-2 px-3 font-medium" colspan="2">Step 5: Final Prediction</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Adjusted pace</td>
+                            <td class="py-2 px-3 text-right font-mono font-medium text-picl-700">{{ forecast.inputs_summary.adjusted_pace }} min/mi</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Target field avg pace</td>
+                            <td class="py-2 px-3 text-right font-mono">{{ forecast.inputs_summary.target_avg_pace }} min/mi</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Target field median pace</td>
+                            <td class="py-2 px-3 text-right font-mono">{{ forecast.inputs_summary.target_median_pace }} min/mi</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 px-3 text-gray-600">Target sample size</td>
+                            <td class="py-2 px-3 text-right font-mono">{{ forecast.inputs_summary.target_sample_size }} results</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </details>
+
+        {% elif not target_division %}
+        <div class="bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 p-12 text-center">
+            <div class="text-gray-400 text-lg mb-2">Select a target division</div>
+            <p class="text-gray-400 text-sm">Choose a division from the dropdown to predict how {{ rider.info.name }} would perform</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Pace sparkline
+{% set valid_races = rider.races | selectattr('min_per_mile') | list %}
+{% if valid_races %}
+const sparkData = {{ valid_races | map(attribute='min_per_mile') | list | tojson }};
+const sparkLabels = {{ valid_races | map(attribute='event_name') | list | tojson }};
+new Chart(document.getElementById('paceSparkline'), {
+    type: 'line',
+    data: {
+        labels: sparkLabels.map((_, i) => i + 1),
+        datasets: [{
+            data: sparkData,
+            borderColor: 'rgb(22,163,74)',
+            backgroundColor: 'rgba(22,163,74,0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointBackgroundColor: 'rgb(22,163,74)',
+            borderWidth: 2,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {legend: {display: false}},
+        scales: {
+            y: {reverse: true, title: {display: false}, ticks: {font: {size: 9}},
+                grid: {display: false}},
+            x: {display: false}
+        }
+    }
+});
+{% endif %}
+
+// Distribution chart
+{% if forecast %}
+const targetPaces = {{ forecast.inputs_summary | tojson }};
+const allPaces = {{ forecast | attr('predicted_min_per_mile') }};
+
+// Build histogram from target distribution
+// We'll create bins and show where the rider falls
+(function() {
+    const riderPace = {{ forecast.predicted_min_per_mile }};
+    // Fetch the raw target paces from the page data
+    // We'll approximate with a gaussian-ish display using the summary stats
+    const avg = targetPaces.target_avg_pace;
+    const med = targetPaces.target_median_pace;
+    const n = targetPaces.target_sample_size;
+    const fieldSize = targetPaces.typical_field_size;
+
+    // Create approximate distribution bars
+    const minPace = Math.max(avg - 8, 5);
+    const maxPace = avg + 8;
+    const binWidth = 1.0;
+    const bins = [];
+    const binLabels = [];
+    for (let p = minPace; p <= maxPace; p += binWidth) {
+        binLabels.push(p.toFixed(0));
+        // Approximate gaussian distribution
+        const z = (p - avg) / Math.max((maxPace - minPace) / 4, 1);
+        bins.push(Math.round(n * Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI) * binWidth / ((maxPace - minPace) / 4)));
+    }
+
+    // Find rider's bin
+    const riderBinIdx = Math.round((riderPace - minPace) / binWidth);
+    const bgColors = bins.map((_, i) => {
+        if (i === riderBinIdx) return 'rgba(22,163,74,0.8)';
+        return 'rgba(148,163,184,0.3)';
+    });
+    const borderColors = bins.map((_, i) => {
+        if (i === riderBinIdx) return 'rgb(22,163,74)';
+        return 'rgba(148,163,184,0.5)';
+    });
+
+    new Chart(document.getElementById('distributionChart'), {
+        type: 'bar',
+        data: {
+            labels: binLabels,
+            datasets: [{
+                label: '{{ target_division }} field',
+                data: bins,
+                backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 1,
+                borderRadius: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {display: false},
+                tooltip: {
+                    callbacks: {
+                        title: (items) => `${items[0].label} min/mi`,
+                        afterBody: (items) => {
+                            if (parseInt(items[0].dataIndex) === riderBinIdx) {
+                                return '← {{ rider.info.name }} predicted here';
+                            }
+                        }
+                    }
+                },
+                annotation: undefined,
+            },
+            scales: {
+                x: {title: {display: true, text: 'Minutes per mile (lower = faster)'}},
+                y: {title: {display: true, text: 'Approx. riders'}, beginAtZero: true}
+            }
+        }
+    });
+})();
+{% endif %}
+</script>
+{% endblock %}
