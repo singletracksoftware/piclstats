@@ -71,3 +71,13 @@ results = Table(
     Index("idx_results_event_category", "event_id", "category"),
     Index("idx_results_conference", "conference", postgresql_where=Column("conference").isnot(None)),
 )
+
+rider_aliases = Table(
+    "rider_aliases",
+    metadata,
+    Column("rider_id", Integer, primary_key=True),
+    Column("canonical_id", Integer, nullable=False),
+    Column("match_method", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    Index("idx_aliases_canonical", "canonical_id"),
+)

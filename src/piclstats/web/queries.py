@@ -23,18 +23,29 @@ def _serialize(row) -> dict:
     return d
 
 
+# Common CTE fragment: resolve any rider to its canonical ID
+_CANONICAL_CTE = """
+    canonical AS (
+        SELECT ri.id AS rider_id, COALESCE(ra.canonical_id, ri.id) AS cid,
+               ri.name, ri.team, ri.school
+        FROM riders ri
+        LEFT JOIN rider_aliases ra ON ra.rider_id = ri.id
+    )
+"""
+
+
 def overview_stats(session: Session) -> dict:
-    """High-level counts for the dashboard home."""
-    row = session.execute(text("""
+    row = session.execute(text(f"""
+        WITH {_CANONICAL_CTE}
         SELECT
             count(DISTINCT e.id) AS events,
-            count(DISTINCT r.rider_id) AS riders,
-            count(DISTINCT ri.team) AS teams,
+            count(DISTINCT c.cid) AS riders,
+            count(DISTINCT c.team) AS teams,
             count(r.id) AS results,
             count(DISTINCT e.season) AS seasons
         FROM results r
         JOIN events e ON r.event_id = e.id
-        JOIN riders ri ON r.rider_id = ri.id
+        JOIN canonical c ON c.rider_id = r.rider_id
     """)).one()
     return _serialize(row._mapping)
 
@@ -63,33 +74,34 @@ def teams_list(session: Session) -> list[str]:
 def search_riders(
     session: Session, q: str, team: str | None = None, season: int | None = None
 ) -> list[dict]:
-    """Search riders by name, optionally filtered by team and season."""
-    sql = """
+    """Search riders by name. Merged riders appear as one row."""
+    sql = f"""
+        WITH {_CANONICAL_CTE}
         SELECT
-            ri.id,
-            ri.name,
-            ri.team,
+            c.cid AS id,
+            c.name,
+            string_agg(DISTINCT c.team, ' / ' ORDER BY c.team) AS team,
             count(DISTINCT r.event_id) AS race_count,
             count(DISTINCT e.season) AS seasons_active,
             round(avg(r.points)::numeric, 1) AS avg_points,
             round(avg(r.place)::numeric, 1) AS avg_place,
             min(e.season) AS first_season,
             max(e.season) AS last_season
-        FROM riders ri
-        JOIN results r ON r.rider_id = ri.id
+        FROM canonical c
+        JOIN results r ON r.rider_id = c.rider_id
         JOIN events e ON r.event_id = e.id
-        WHERE ri.name ILIKE :q
+        WHERE c.name ILIKE :q
     """
     params: dict = {"q": f"%{q}%"}
     if team:
-        sql += " AND ri.team ILIKE :team"
+        sql += " AND c.team ILIKE :team"
         params["team"] = f"%{team}%"
     if season:
         sql += " AND e.season = :season"
         params["season"] = season
     sql += """
-        GROUP BY ri.id, ri.name, ri.team
-        ORDER BY avg_points DESC NULLS LAST, ri.name
+        GROUP BY c.cid, c.name
+        ORDER BY avg_points DESC NULLS LAST, c.name
         LIMIT 100
     """
     rows = session.execute(text(sql), params).all()
@@ -97,13 +109,45 @@ def search_riders(
 
 
 def rider_detail(session: Session, rider_id: int) -> dict | None:
-    """Full rider profile with race history."""
+    """Full rider profile — unified across all aliases."""
+    # Resolve to canonical
+    canonical_id = session.execute(text("""
+        SELECT COALESCE(
+            (SELECT canonical_id FROM rider_aliases WHERE rider_id = :id),
+            :id
+        )
+    """), {"id": rider_id}).scalar()
+
+    # Get all rider_ids in this canonical group
+    group_ids = session.execute(text("""
+        SELECT rider_id FROM rider_aliases WHERE canonical_id = :cid
+        UNION
+        SELECT :cid
+    """), {"cid": canonical_id}).all()
+    all_ids = [r[0] for r in group_ids]
+
     info = session.execute(text("""
-        SELECT ri.id, ri.name, ri.team, ri.school
-        FROM riders ri WHERE ri.id = :id
-    """), {"id": rider_id}).one_or_none()
+        SELECT ri.id, ri.name, ri.school,
+               string_agg(DISTINCT ri2.team, ' / ' ORDER BY ri2.team) AS team
+        FROM riders ri
+        CROSS JOIN riders ri2
+        WHERE ri.id = :cid AND ri2.id = ANY(:ids)
+        GROUP BY ri.id, ri.name, ri.school
+    """), {"cid": canonical_id, "ids": all_ids}).one_or_none()
     if not info:
         return None
+
+    # Team history
+    team_history = session.execute(text("""
+        SELECT DISTINCT ri.team, min(e.season) AS from_season, max(e.season) AS to_season,
+               count(r.id) AS races
+        FROM riders ri
+        JOIN results r ON r.rider_id = ri.id
+        JOIN events e ON r.event_id = e.id
+        WHERE ri.id = ANY(:ids)
+        GROUP BY ri.team
+        ORDER BY from_season
+    """), {"ids": all_ids}).all()
 
     races = session.execute(text("""
         SELECT
@@ -120,12 +164,14 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
             r.total_time,
             r.total_time_raw,
             r.lap1, r.lap2, r.lap3, r.lap4, r.lap5, r.lap6,
-            r.penalty
+            r.penalty,
+            ri.team
         FROM results r
         JOIN events e ON r.event_id = e.id
-        WHERE r.rider_id = :id
+        JOIN riders ri ON r.rider_id = ri.id
+        WHERE r.rider_id = ANY(:ids)
         ORDER BY e.season, e.event_order
-    """), {"id": rider_id}).all()
+    """), {"ids": all_ids}).all()
 
     season_stats = session.execute(text("""
         SELECT
@@ -139,12 +185,11 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
             r.division AS primary_division
         FROM results r
         JOIN events e ON r.event_id = e.id
-        WHERE r.rider_id = :id AND r.place IS NOT NULL
+        WHERE r.rider_id = ANY(:ids) AND r.place IS NOT NULL
         GROUP BY e.season, r.division
         ORDER BY e.season
-    """), {"id": rider_id}).all()
+    """), {"ids": all_ids}).all()
 
-    # Percentile within category per race
     percentiles = session.execute(text("""
         WITH ranked AS (
             SELECT
@@ -167,12 +212,13 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
             round(((1.0 - ranked.pct_rank) * 100)::numeric, 1) AS percentile
         FROM ranked
         JOIN events e ON ranked.event_id = e.id
-        WHERE ranked.rider_id = :id
+        WHERE ranked.rider_id = ANY(:ids)
         ORDER BY e.season, e.event_order
-    """), {"id": rider_id}).all()
+    """), {"ids": all_ids}).all()
 
     return {
         "info": _serialize(info._mapping),
+        "team_history": [_serialize(r._mapping) for r in team_history],
         "races": [_serialize(r._mapping) for r in races],
         "season_stats": [_serialize(r._mapping) for r in season_stats],
         "percentiles": [_serialize(r._mapping) for r in percentiles],
@@ -180,7 +226,6 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
 
 
 def search_teams(session: Session, q: str, season: int | None = None) -> list[dict]:
-    """Search teams by name."""
     sql = """
         SELECT
             ri.team,
@@ -208,17 +253,19 @@ def search_teams(session: Session, q: str, season: int | None = None) -> list[di
 
 
 def team_detail(session: Session, team_name: str, season: int | None = None) -> dict | None:
-    """Full team profile."""
     params: dict = {"team": team_name}
     season_filter = ""
     if season:
         season_filter = "AND e.season = :season"
         params["season"] = season
 
+    # Use canonical IDs so riders who changed teams still show their full stats
+    # when viewing from any of their teams
     roster = session.execute(text(f"""
+        WITH {_CANONICAL_CTE}
         SELECT
-            ri.id,
-            ri.name,
+            c.cid AS id,
+            c.name,
             r.division,
             r.gender,
             count(DISTINCT r.event_id) AS races,
@@ -227,12 +274,12 @@ def team_detail(session: Session, team_name: str, season: int | None = None) -> 
             min(r.place) AS best_place,
             max(r.points) AS best_points,
             sum(r.points) AS total_points
-        FROM riders ri
-        JOIN results r ON r.rider_id = ri.id
+        FROM canonical c
+        JOIN results r ON r.rider_id = c.rider_id
         JOIN events e ON r.event_id = e.id
-        WHERE ri.team = :team {season_filter}
+        WHERE c.team = :team {season_filter}
           AND r.place IS NOT NULL
-        GROUP BY ri.id, ri.name, r.division, r.gender
+        GROUP BY c.cid, c.name, r.division, r.gender
         ORDER BY r.division, avg_points DESC NULLS LAST
     """), params).all()
 
@@ -295,7 +342,7 @@ def leaderboard(
     metric: str = "avg_points",
     limit: int = 25,
 ) -> list[dict]:
-    """Top riders by chosen metric."""
+    """Top riders by chosen metric — merged riders unified."""
     params: dict = {}
     filters: list[str] = ["r.place IS NOT NULL"]
     if season:
@@ -319,10 +366,11 @@ def leaderboard(
     }.get(metric, "avg_points DESC NULLS LAST")
 
     sql = f"""
+        WITH {_CANONICAL_CTE}
         SELECT
-            ri.id AS rider_id,
-            ri.name,
-            ri.team,
+            c.cid AS rider_id,
+            c.name,
+            string_agg(DISTINCT c.team, ' / ' ORDER BY c.team) AS team,
             r.division,
             r.gender,
             count(DISTINCT r.event_id) AS races,
@@ -331,10 +379,10 @@ def leaderboard(
             min(r.place) AS best_place,
             sum(r.points) AS total_points
         FROM results r
-        JOIN riders ri ON r.rider_id = ri.id
+        JOIN canonical c ON c.rider_id = r.rider_id
         JOIN events e ON r.event_id = e.id
         WHERE {where}
-        GROUP BY ri.id, ri.name, ri.team, r.division, r.gender
+        GROUP BY c.cid, c.name, r.division, r.gender
         HAVING count(DISTINCT r.event_id) >= 2
         ORDER BY {order_col}
         LIMIT :limit
@@ -349,7 +397,6 @@ def team_leaderboard(
     season: int | None = None,
     limit: int = 25,
 ) -> list[dict]:
-    """Top teams by average points."""
     params: dict = {"limit": limit}
     season_filter = ""
     if season:

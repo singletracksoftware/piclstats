@@ -242,5 +242,106 @@ def serve(host: str, port: int, do_reload: bool) -> None:
     )
 
 
+@main.group()
+def merge() -> None:
+    """Manage rider deduplication/merging."""
+
+
+@merge.command("auto")
+@click.option("--dry-run", is_flag=True, help="Show what would be merged without doing it.")
+def merge_auto(dry_run: bool) -> None:
+    """Auto-merge riders with the same name (no same-event overlap)."""
+    from piclstats.db.engine import get_session
+    from piclstats.db.merge import auto_merge
+
+    session = get_session()
+    try:
+        if dry_run:
+            import logging
+            logging.basicConfig(level="INFO")
+        count = auto_merge(session, dry_run=dry_run)
+        if dry_run:
+            click.echo(f"\nDry run complete. Would create {count} aliases.")
+        else:
+            click.echo(f"Created {count} aliases.")
+    finally:
+        session.close()
+
+
+@merge.command("status")
+def merge_status() -> None:
+    """Show merge statistics."""
+    from piclstats.db.engine import get_session
+    from piclstats.db.merge import merge_stats
+
+    session = get_session()
+    try:
+        stats = merge_stats(session)
+        click.echo(
+            f"Total riders: {stats['total_riders']}\n"
+            f"Aliases: {stats['aliases']}\n"
+            f"Canonical groups: {stats['canonical_groups']}\n"
+            f"Remaining duplicate names: {stats['remaining_dupes']}"
+        )
+    finally:
+        session.close()
+
+
+@merge.command("conflicts")
+def merge_conflicts() -> None:
+    """Show riders with same name that overlap in events (need manual review)."""
+    from piclstats.db.engine import get_session
+    from piclstats.db.merge import find_conflicts
+
+    session = get_session()
+    try:
+        conflicts = find_conflicts(session)
+        if not conflicts:
+            click.echo("No conflicts found.")
+            return
+        for group in conflicts:
+            click.echo(f"\n{group['name']}:")
+            for e in group["entries"]:
+                click.echo(
+                    f"  id={e['rider_id']:<5} team={e['team']:<35} "
+                    f"races={e['races']:<3} cats={e['categories']} seasons={e['seasons']}"
+                )
+    finally:
+        session.close()
+
+
+@merge.command("link")
+@click.argument("canonical_id", type=int)
+@click.argument("alias_ids", type=int, nargs=-1, required=True)
+def merge_link(canonical_id: int, alias_ids: tuple[int, ...]) -> None:
+    """Manually merge rider IDs under a canonical ID."""
+    from piclstats.db.engine import get_session
+    from piclstats.db.merge import manual_merge
+
+    session = get_session()
+    try:
+        count = manual_merge(session, canonical_id, list(alias_ids))
+        click.echo(f"Linked {count} alias(es) to canonical rider {canonical_id}.")
+    finally:
+        session.close()
+
+
+@merge.command("unlink")
+@click.argument("rider_id", type=int)
+def merge_unlink(rider_id: int) -> None:
+    """Remove a rider from its merged group."""
+    from piclstats.db.engine import get_session
+    from piclstats.db.merge import unmerge
+
+    session = get_session()
+    try:
+        if unmerge(session, rider_id):
+            click.echo(f"Rider {rider_id} unlinked.")
+        else:
+            click.echo(f"Rider {rider_id} was not merged.")
+    finally:
+        session.close()
+
+
 if __name__ == "__main__":
     main()
