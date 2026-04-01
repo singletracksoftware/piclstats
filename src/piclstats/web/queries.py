@@ -424,3 +424,114 @@ def team_leaderboard(
     """
     rows = session.execute(text(sql), params).all()
     return [_serialize(r._mapping) for r in rows]
+
+
+# ── Course queries ──────────────────────────────────────────────────
+
+
+def courses_list(session: Session) -> list[dict]:
+    rows = session.execute(text("""
+        SELECT c.id, c.name, c.location, c.distance_miles, c.elevation_ft,
+               c.difficulty_score, count(DISTINCT e.id) AS event_count,
+               count(r.id) AS result_count
+        FROM courses c
+        LEFT JOIN events e ON e.course_id = c.id
+        LEFT JOIN results r ON r.event_id = e.id
+        GROUP BY c.id
+        ORDER BY c.name
+    """)).all()
+    return [_serialize(r._mapping) for r in rows]
+
+
+def course_detail(session: Session, course_id: int, season: int | None = None) -> dict | None:
+    info = session.execute(text("""
+        SELECT id, name, location, distance_miles, elevation_ft, difficulty_score, notes
+        FROM courses WHERE id = :id
+    """), {"id": course_id}).one_or_none()
+    if not info:
+        return None
+
+    params: dict = {"cid": course_id}
+    season_filter = ""
+    if season:
+        season_filter = "AND e.season = :season"
+        params["season"] = season
+
+    events_at = session.execute(text(f"""
+        SELECT e.id, e.season, e.event_order, e.event_name,
+               count(r.id) AS results
+        FROM events e
+        LEFT JOIN results r ON r.event_id = e.id
+        WHERE e.course_id = :cid {season_filter}
+        GROUP BY e.id
+        ORDER BY e.season, e.event_order
+    """), params).all()
+
+    laps = session.execute(text("""
+        SELECT division, gender, lap_count, max_duration_mins, cutoff_mins
+        FROM division_laps
+        WHERE course_id = :cid AND season IS NULL
+        ORDER BY lap_count DESC, division, gender
+    """), {"cid": course_id}).all()
+
+    division_stats = session.execute(text(f"""
+        SELECT r.division, r.gender,
+               count(DISTINCT COALESCE(ra.canonical_id, ri.id)) AS riders,
+               count(r.id) AS results,
+               round(avg(r.place)::numeric, 1) AS avg_place,
+               round(avg(r.points)::numeric, 1) AS avg_points,
+               round(avg(EXTRACT(EPOCH FROM r.total_time))::numeric, 1) AS avg_time_secs,
+               min(r.total_time) AS fastest_time,
+               round(avg(
+                   EXTRACT(EPOCH FROM r.total_time) / NULLIF(dl.lap_count, 0)
+               )::numeric, 1) AS avg_pace_per_lap_secs
+        FROM results r
+        JOIN events e ON r.event_id = e.id
+        JOIN riders ri ON r.rider_id = ri.id
+        LEFT JOIN rider_aliases ra ON ra.rider_id = ri.id
+        LEFT JOIN division_laps dl ON dl.course_id = e.course_id
+            AND dl.division = r.division
+            AND (dl.gender = r.gender OR dl.gender IS NULL)
+            AND dl.season IS NULL
+        WHERE e.course_id = :cid AND r.place IS NOT NULL AND r.total_time IS NOT NULL
+          {season_filter}
+        GROUP BY r.division, r.gender
+        ORDER BY r.division, r.gender
+    """), params).all()
+
+    top_riders = session.execute(text(f"""
+        WITH {_CANONICAL_CTE}
+        SELECT
+            c.cid AS rider_id,
+            c.name,
+            string_agg(DISTINCT c.team, ' / ' ORDER BY c.team) AS team,
+            r.division,
+            count(DISTINCT e.id) AS appearances,
+            round(avg(r.place)::numeric, 1) AS avg_place,
+            round(avg(r.points)::numeric, 1) AS avg_points,
+            min(r.total_time) AS best_time
+        FROM results r
+        JOIN events e ON r.event_id = e.id
+        JOIN canonical c ON c.rider_id = r.rider_id
+        WHERE e.course_id = :cid AND r.place IS NOT NULL
+          {season_filter}
+        GROUP BY c.cid, c.name, r.division
+        HAVING count(DISTINCT e.id) >= 2
+        ORDER BY avg_points DESC NULLS LAST
+        LIMIT 20
+    """), params).all()
+
+    seasons_available = session.execute(text("""
+        SELECT DISTINCT e.season
+        FROM events e WHERE e.course_id = :cid
+        ORDER BY e.season
+    """), {"cid": course_id}).all()
+
+    return {
+        "info": _serialize(info._mapping),
+        "events": [_serialize(r._mapping) for r in events_at],
+        "laps": [_serialize(r._mapping) for r in laps],
+        "division_stats": [_serialize(r._mapping) for r in division_stats],
+        "top_riders": [_serialize(r._mapping) for r in top_riders],
+        "seasons_available": [r[0] for r in seasons_available],
+    }

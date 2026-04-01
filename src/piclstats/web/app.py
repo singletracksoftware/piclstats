@@ -111,3 +111,23 @@ def leaderboard_page(
         request, results=results, seasons=seasons, divisions=divisions,
         season=season, division=division, gender=gender, metric=metric, view=view,
     ))
+
+
+@app.get("/courses", response_class=HTMLResponse)
+def courses_page(request: Request):
+    with get_session() as session:
+        course_list = queries.courses_list(session)
+    return templates.TemplateResponse("courses.html", _ctx(request, courses=course_list))
+
+
+@app.get("/course/{course_id}", response_class=HTMLResponse)
+def course_profile(
+    request: Request,
+    course_id: int,
+    season: int | None = Query(None),
+):
+    with get_session() as session:
+        data = queries.course_detail(session, course_id, season)
+    if not data:
+        return HTMLResponse("Course not found", status_code=404)
+    return templates.TemplateResponse("course_detail.html", _ctx(request, **data, season=season))

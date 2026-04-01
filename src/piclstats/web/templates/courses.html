@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Courses — PICL Stats{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold text-gray-900 mb-6">Courses</h1>
+
+<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for c in courses %}
+    <a href="/course/{{ c.id }}" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:border-picl-300 hover:shadow-md transition-all">
+        <h2 class="text-lg font-semibold text-picl-700">{{ c.name }}</h2>
+        <div class="text-sm text-gray-500 mt-1">{{ c.location or '' }}</div>
+        <div class="mt-3 grid grid-cols-3 gap-3 text-xs">
+            <div>
+                <div class="text-gray-400">Events</div>
+                <div class="font-mono font-medium text-sm">{{ c.event_count }}</div>
+            </div>
+            <div>
+                <div class="text-gray-400">Results</div>
+                <div class="font-mono font-medium text-sm">{{ "{:,}".format(c.result_count or 0) }}</div>
+            </div>
+            <div>
+                <div class="text-gray-400">Difficulty</div>
+                <div class="font-mono font-medium text-sm">
+                    {% if c.difficulty_score %}{{ "%.1f"|format(c.difficulty_score) }}{% else %}<span class="text-gray-300">TBD</span>{% endif %}
+                </div>
+            </div>
+        </div>
+        {% if c.distance_miles or c.elevation_ft %}
+        <div class="mt-2 flex gap-3 text-xs text-gray-400">
+            {% if c.distance_miles %}<span>{{ "%.1f"|format(c.distance_miles) }} mi/lap</span>{% endif %}
+            {% if c.elevation_ft %}<span>{{ c.elevation_ft|int }} ft gain/lap</span>{% endif %}
+        </div>
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% endblock %}

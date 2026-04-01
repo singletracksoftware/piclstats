@@ -3,6 +3,7 @@
 from sqlalchemy import (
     Column,
     DateTime,
+    Float,
     Index,
     Integer,
     Interval,
@@ -70,6 +71,48 @@ results = Table(
     Index("idx_results_category", "category"),
     Index("idx_results_event_category", "event_id", "category"),
     Index("idx_results_conference", "conference", postgresql_where=Column("conference").isnot(None)),
+)
+
+team_conferences = Table(
+    "team_conferences",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("team", Text, nullable=False),
+    Column("season", SmallInteger, nullable=False),
+    Column("conference", Text, nullable=False),
+    Column("conference_group", Text),  # lineage: "Eastern" for Blue+Gold
+    Column("source", Text, nullable=False),
+    UniqueConstraint("team", "season", name="uq_team_conf_season"),
+    Index("idx_team_conf_team", "team"),
+    Index("idx_team_conf_season", "season"),
+)
+
+courses = Table(
+    "courses",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", Text, nullable=False, unique=True),
+    Column("location", Text),
+    Column("distance_miles", Float),
+    Column("elevation_ft", Float),
+    Column("difficulty_score", Float),
+    Column("notes", Text),
+)
+
+division_laps = Table(
+    "division_laps",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("course_id", Integer, nullable=False),
+    Column("division", Text, nullable=False),
+    Column("gender", Text),
+    Column("lap_count", SmallInteger, nullable=False),
+    Column("max_duration_mins", SmallInteger),
+    Column("cutoff_mins", SmallInteger),
+    Column("season", SmallInteger),
+    UniqueConstraint("course_id", "division", "gender", "season",
+                     name="uq_div_laps_course_div"),
+    Index("idx_div_laps_course", "course_id"),
 )
 
 rider_aliases = Table(

@@ -37,6 +37,23 @@ def init_db() -> None:
 
 
 @main.command()
+def seed() -> None:
+    """Seed reference data (courses, conferences, division profiles)."""
+    from piclstats.db.engine import get_session
+    from piclstats.db.seed import seed_all
+
+    import logging
+    logging.basicConfig(level="INFO")
+
+    session = get_session()
+    try:
+        seed_all(session)
+        click.echo("Seed complete.")
+    finally:
+        session.close()
+
+
+@main.command()
 @click.option("--season", type=int, multiple=True, help="Season(s) to scrape (default: all).")
 @click.option("--event-id", type=int, multiple=True, help="Specific event ID(s). Overrides --season.")
 @click.option("--dry-run", is_flag=True, help="Scrape and parse only — do not write to DB.")

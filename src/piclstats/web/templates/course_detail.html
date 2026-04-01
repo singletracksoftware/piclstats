@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}{{ info.name }} — PICL Stats{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="mb-6">
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ info.name }}</h1>
+            <div class="text-sm text-gray-500 mt-1">{{ info.location or '' }}</div>
+            {% if info.notes %}<p class="text-sm text-gray-400 mt-1">{{ info.notes }}</p>{% endif %}
+        </div>
+        <a href="/courses" class="text-sm text-gray-400 hover:text-gray-600">&larr; All courses</a>
+    </div>
+    <div class="mt-3 flex items-center gap-2 flex-wrap">
+        <a href="/course/{{ info.id }}" class="px-3 py-1 rounded-full text-xs font-medium
+            {{ 'bg-picl-600 text-white' if not season else 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+            All Seasons
+        </a>
+        {% for s in seasons_available %}
+        <a href="/course/{{ info.id }}?season={{ s }}" class="px-3 py-1 rounded-full text-xs font-medium
+            {{ 'bg-picl-600 text-white' if season == s else 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+            {{ s }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Course stats -->
+<div class="grid md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div class="text-gray-400 text-xs">Distance / Lap</div>
+        <div class="text-2xl font-bold text-picl-700 mt-1">
+            {% if info.distance_miles %}{{ "%.1f"|format(info.distance_miles) }} mi{% else %}<span class="text-gray-300 text-lg">TBD</span>{% endif %}
+        </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div class="text-gray-400 text-xs">Elevation / Lap</div>
+        <div class="text-2xl font-bold text-picl-700 mt-1">
+            {% if info.elevation_ft %}{{ info.elevation_ft|int }} ft{% else %}<span class="text-gray-300 text-lg">TBD</span>{% endif %}
+        </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div class="text-gray-400 text-xs">Difficulty Score</div>
+        <div class="text-2xl font-bold text-picl-700 mt-1">
+            {% if info.difficulty_score %}{{ "%.1f"|format(info.difficulty_score) }}{% else %}<span class="text-gray-300 text-lg">TBD</span>{% endif %}
+        </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div class="text-gray-400 text-xs">Events Hosted</div>
+        <div class="text-2xl font-bold text-picl-700 mt-1">{{ events|length }}</div>
+    </div>
+</div>
+
+<div class="grid lg:grid-cols-2 gap-8 mb-8">
+    <!-- Division lap profiles -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Division Profiles</h2>
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
+                    <th class="pb-2">Division</th>
+                    <th class="pb-2">Gender</th>
+                    <th class="pb-2 text-right">Laps</th>
+                    <th class="pb-2 text-right">Max Time</th>
+                    <th class="pb-2 text-right">Cutoff</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for l in laps %}
+                {% if l.division not in ['MS Advanced', 'Single Lap High School', 'Single Lap Middle School'] %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2 font-medium">{{ l.division }}</td>
+                    <td class="py-2 text-gray-500 text-xs">{{ l.gender or 'All' }}</td>
+                    <td class="py-2 text-right font-mono">{{ l.lap_count }}</td>
+                    <td class="py-2 text-right font-mono text-gray-600">{{ l.max_duration_mins or '—' }} min</td>
+                    <td class="py-2 text-right font-mono text-gray-600">{{ l.cutoff_mins or '—' }} min</td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Events at this course -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Event History</h2>
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
+                    <th class="pb-2">Season</th>
+                    <th class="pb-2">Event</th>
+                    <th class="pb-2 text-right">Results</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for e in events %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2 font-medium">{{ e.season }}</td>
+                    <td class="py-2 text-gray-600 truncate max-w-xs" title="{{ e.event_name }}">{{ e.event_name }}</td>
+                    <td class="py-2 text-right font-mono">{{ e.results }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Division performance at this course -->
+{% if division_stats %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Division Performance at {{ info.name }}</h2>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b">
+                    <th class="px-3 py-3">Division</th>
+                    <th class="px-3 py-3">Gender</th>
+                    <th class="px-3 py-3 text-right">Riders</th>
+                    <th class="px-3 py-3 text-right">Avg Place</th>
+                    <th class="px-3 py-3 text-right">Avg Points</th>
+                    <th class="px-3 py-3 text-right">Avg Pace/Lap</th>
+                    <th class="px-3 py-3 text-right">Fastest Time</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for d in division_stats %}
+                <tr class="hover:bg-picl-50 transition-colors">
+                    <td class="px-3 py-2 font-medium">{{ d.division or '—' }}</td>
+                    <td class="px-3 py-2 text-gray-500 text-xs">{{ d.gender or '' }}</td>
+                    <td class="px-3 py-2 text-right font-mono">{{ d.riders }}</td>
+                    <td class="px-3 py-2 text-right font-mono">{{ d.avg_place or '—' }}</td>
+                    <td class="px-3 py-2 text-right font-mono font-medium">{{ d.avg_points or '—' }}</td>
+                    <td class="px-3 py-2 text-right font-mono text-gray-600">
+                        {% if d.avg_pace_per_lap_secs %}
+                            {{ "%d:%02d"|format(d.avg_pace_per_lap_secs // 60, d.avg_pace_per_lap_secs % 60) }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono text-gray-600">{{ d.fastest_time or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Pace comparison chart -->
+{% if division_stats %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Average Pace Per Lap by Division</h2>
+    <canvas id="paceChart" height="150"></canvas>
+</div>
+{% endif %}
+
+<!-- Top riders at this course -->
+{% if top_riders %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="px-6 py-3 border-b bg-gray-50">
+        <h2 class="text-lg font-semibold text-gray-900">Top Returning Riders at {{ info.name }}</h2>
+        <p class="text-xs text-gray-400">Riders with 2+ appearances, ranked by avg points</p>
+    </div>
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wider border-b bg-gray-50">
+                <th class="px-4 py-3">#</th>
+                <th class="px-4 py-3">Rider</th>
+                <th class="px-4 py-3">Team</th>
+                <th class="px-4 py-3">Division</th>
+                <th class="px-4 py-3 text-right">Appearances</th>
+                <th class="px-4 py-3 text-right">Avg Pts</th>
+                <th class="px-4 py-3 text-right">Avg Place</th>
+                <th class="px-4 py-3 text-right">Best Time</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for r in top_riders %}
+            <tr class="hover:bg-picl-50 transition-colors">
+                <td class="px-4 py-2 text-gray-400">{{ loop.index }}</td>
+                <td class="px-4 py-2">
+                    <a href="/rider/{{ r.rider_id }}" class="text-picl-700 font-medium hover:underline">{{ r.name }}</a>
+                </td>
+                <td class="px-4 py-2 text-gray-600 text-xs">{{ r.team or '' }}</td>
+                <td class="px-4 py-2 text-gray-500 text-xs">{{ r.division or '' }}</td>
+                <td class="px-4 py-2 text-right font-mono">{{ r.appearances }}</td>
+                <td class="px-4 py-2 text-right font-mono font-medium">{{ r.avg_points or '—' }}</td>
+                <td class="px-4 py-2 text-right font-mono">{{ r.avg_place or '—' }}</td>
+                <td class="px-4 py-2 text-right font-mono text-xs">{{ r.best_time or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if division_stats %}
+<script>
+const stats = {{ division_stats | tojson }};
+const filtered = stats.filter(d => d.avg_pace_per_lap_secs && d.avg_pace_per_lap_secs > 0);
+const labels = filtered.map(d => `${d.division} ${d.gender || ''}`);
+const paceData = filtered.map(d => d.avg_pace_per_lap_secs);
+
+const colors = {
+    'Varsity': 'rgb(220, 38, 38)',
+    'JV1': 'rgb(234, 88, 12)',
+    'JV2': 'rgb(202, 138, 4)',
+    'JV3': 'rgb(22, 163, 74)',
+    'Middle School Advanced': 'rgb(59, 130, 246)',
+    'MS Advanced': 'rgb(59, 130, 246)',
+    '8th Grade': 'rgb(99, 102, 241)',
+    '7th Grade': 'rgb(139, 92, 246)',
+    '6th Grade': 'rgb(168, 85, 247)',
+};
+const bgColors = filtered.map(d => {
+    const base = colors[d.division] || 'rgb(107, 114, 128)';
+    return base.replace('rgb', 'rgba').replace(')', ', 0.2)');
+});
+const borderColors = filtered.map(d => colors[d.division] || 'rgb(107, 114, 128)');
+
+new Chart(document.getElementById('paceChart'), {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: 'Avg Pace Per Lap (seconds)',
+            data: paceData,
+            backgroundColor: bgColors,
+            borderColor: borderColors,
+            borderWidth: 1.5,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        indexAxis: 'y',
+        plugins: {
+            legend: {display: false},
+            tooltip: {
+                callbacks: {
+                    label: (ctx) => {
+                        const secs = ctx.raw;
+                        const m = Math.floor(secs / 60);
+                        const s = Math.floor(secs % 60);
+                        return `${m}:${s.toString().padStart(2, '0')} per lap`;
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                title: {display: true, text: 'Seconds per lap'},
+                ticks: {
+                    callback: (v) => {
+                        const m = Math.floor(v / 60);
+                        const s = Math.floor(v % 60);
+                        return `${m}:${s.toString().padStart(2, '0')}`;
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
+{% endif %}
+{% endblock %}
