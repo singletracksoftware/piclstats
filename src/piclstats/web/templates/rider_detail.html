@@ -94,6 +94,7 @@
                     <th class="px-4 py-3 text-right">Place</th>
                     <th class="px-4 py-3 text-right">Points</th>
                     <th class="px-4 py-3 text-right">Time</th>
+                    <th class="px-4 py-3 text-right">Min/Mi</th>
                     <th class="px-4 py-3 text-right">Lap 1</th>
                     <th class="px-4 py-3 text-right">Lap 2</th>
                     <th class="px-4 py-3 text-right">Lap 3</th>
@@ -112,6 +113,9 @@
                     </td>
                     <td class="px-4 py-2 text-right font-mono">{{ r.points or '—' }}</td>
                     <td class="px-4 py-2 text-right font-mono text-xs">{{ r.total_time_raw or '—' }}</td>
+                    <td class="px-4 py-2 text-right font-mono font-medium text-picl-700">
+                        {% if r.min_per_mile %}{{ "%.1f"|format(r.min_per_mile) }}{% else %}—{% endif %}
+                    </td>
                     <td class="px-4 py-2 text-right font-mono text-xs">{{ r.lap1 or '' }}</td>
                     <td class="px-4 py-2 text-right font-mono text-xs">{{ r.lap2 or '' }}</td>
                     <td class="px-4 py-2 text-right font-mono text-xs">{{ r.lap3 or '' }}</td>

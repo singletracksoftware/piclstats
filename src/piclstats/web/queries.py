@@ -165,10 +165,28 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
             r.total_time_raw,
             r.lap1, r.lap2, r.lap3, r.lap4, r.lap5, r.lap6,
             r.penalty,
-            ri.team
+            ri.team,
+            dl.loop_type,
+            dl.lap_count AS expected_laps,
+            cl.distance_miles AS loop_distance,
+            CASE WHEN r.total_time IS NOT NULL
+                      AND r.total_time < interval '2 hours'
+                      AND dl.lap_count > 0
+                      AND cl.distance_miles > 0
+                 THEN round((
+                     (EXTRACT(EPOCH FROM r.total_time) / 60.0)
+                     / (dl.lap_count * cl.distance_miles)
+                 )::numeric, 1)
+            END AS min_per_mile
         FROM results r
         JOIN events e ON r.event_id = e.id
         JOIN riders ri ON r.rider_id = ri.id
+        LEFT JOIN division_laps dl ON dl.course_id = e.course_id
+            AND dl.division = r.division
+            AND (dl.gender = r.gender OR dl.gender IS NULL)
+            AND dl.season IS NULL
+        LEFT JOIN course_loops cl ON cl.course_id = e.course_id
+            AND cl.loop_type = dl.loop_type
         WHERE r.rider_id = ANY(:ids)
         ORDER BY e.season, e.event_order
     """), {"ids": all_ids}).all()
