@@ -8,4 +8,4 @@ python -m piclstats.cli init-db
 python -m piclstats.cli seed
 
 # Start the server
-exec uvicorn piclstats.web.app:app --host 0.0.0.0 --port 8080
+exec uvicorn piclstats.web.app:app --host 0.0.0.0 --port ${PORT:-8080}

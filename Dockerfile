@@ -9,7 +9,7 @@ COPY alembic/ alembic/
 
 RUN pip install --no-cache-dir .
 
-EXPOSE 8080
+EXPOSE ${PORT:-8080}
 
 COPY start.sh .
 
