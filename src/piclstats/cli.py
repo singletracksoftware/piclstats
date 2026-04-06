@@ -31,8 +31,6 @@ def init_db() -> None:
     from alembic.config import Config
 
     alembic_cfg = Config("alembic.ini")
-    # Escape % for configparser interpolation
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
     command.upgrade(alembic_cfg, "head")
     click.echo("Database migrated to head.")
 
