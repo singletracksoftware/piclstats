@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Admin — PICL Stats{% endblock %}
+{% block content %}
+<div class="max-w-2xl">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">Admin</h1>
+    <div class="space-y-3">
+        <a href="/admin/forecast" class="block p-4 bg-white rounded-lg shadow hover:shadow-md border border-gray-200">
+            <div class="font-semibold text-picl-800">Forecast settings</div>
+            <div class="text-sm text-gray-600">Tune the rider prediction model — recency, fatigue, climbing impact, thresholds.</div>
+        </a>
+        <a href="/admin/courses" class="block p-4 bg-white rounded-lg shadow hover:shadow-md border border-gray-200">
+            <div class="font-semibold text-picl-800">Course stats</div>
+            <div class="text-sm text-gray-600">Enter per-course distance, elevation, and MS/HS loop data.</div>
+        </a>
+    </div>
+</div>
+{% endblock %}

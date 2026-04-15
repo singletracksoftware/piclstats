@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from fastapi import FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -17,10 +17,17 @@ TEMPLATE_DIR = Path(__file__).parent / "templates"
 app = FastAPI(title="PICL Stats Dashboard")
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
+from piclstats.web.admin import router as admin_router  # noqa: E402
+app.include_router(admin_router)
+
 
 def _ctx(request: Request, **kwargs) -> dict:
     """Build base template context."""
     return {"request": request, **kwargs}
+
+
+def optional_season(season: str = Query("")) -> int | None:
+    return int(season) if season else None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -41,7 +48,7 @@ def rider_search(
     request: Request,
     q: str = Query("", description="Rider name search"),
     team: str = Query("", description="Team filter"),
-    season: int | None = Query(None),
+    season: int | None = Depends(optional_season),
 ):
     with get_session() as session:
         results = queries.search_riders(session, q, team or None, season) if q else []
@@ -66,7 +73,7 @@ def rider_profile(request: Request, rider_id: int):
 def team_search(
     request: Request,
     q: str = Query("", description="Team name search"),
-    season: int | None = Query(None),
+    season: int | None = Depends(optional_season),
 ):
     with get_session() as session:
         results = queries.search_teams(session, q, season) if q else []
@@ -80,7 +87,7 @@ def team_search(
 def team_profile(
     request: Request,
     team_name: str,
-    season: int | None = Query(None),
+    season: int | None = Depends(optional_season),
 ):
     with get_session() as session:
         data = queries.team_detail(session, team_name, season)
@@ -92,7 +99,7 @@ def team_profile(
 @app.get("/leaderboard", response_class=HTMLResponse)
 def leaderboard_page(
     request: Request,
-    season: int | None = Query(None),
+    season: int | None = Depends(optional_season),
     division: str = Query(""),
     gender: str = Query(""),
     metric: str = Query("avg_points"),
@@ -124,7 +131,7 @@ def courses_page(request: Request):
 def course_profile(
     request: Request,
     course_id: int,
-    season: int | None = Query(None),
+    season: int | None = Depends(optional_season),
 ):
     with get_session() as session:
         data = queries.course_detail(session, course_id, season)
@@ -138,7 +145,7 @@ def rider_forecast(
     request: Request,
     rider_id: int,
     target_division: str = Query(""),
-    season: int | None = Query(None),
+    season: int | None = Depends(optional_season),
 ):
     from piclstats.web.forecast import ForecastInput, RaceObservation, StatisticalForecastModel
 
@@ -210,7 +217,8 @@ def rider_forecast(
                         target_loop_miles=target_profile["loop_miles"],
                     )
 
-                    model = StatisticalForecastModel()
+                    from piclstats.db.settings_store import get_forecast_config
+                    model = StatisticalForecastModel(config=get_forecast_config())
                     forecast_result = model.predict(inp)
                     if forecast_result is None:
                         error = "Not enough data to produce a reliable forecast."

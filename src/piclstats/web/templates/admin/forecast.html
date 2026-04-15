@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Forecast settings — Admin{% endblock %}
+{% block content %}
+<div class="max-w-2xl">
+    <div class="mb-4"><a href="/admin" class="text-sm text-picl-700 hover:underline">&larr; Admin</a></div>
+    <h1 class="text-2xl font-bold text-gray-900 mb-2">Forecast settings</h1>
+    <p class="text-sm text-gray-600 mb-6">Overrides saved here replace the built-in defaults. Leave a field blank to fall back to the default value.</p>
+
+    {% if saved %}
+    <div class="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded text-sm">Saved.</div>
+    {% endif %}
+
+    <form method="post" action="/admin/forecast" class="space-y-4 bg-white rounded-lg shadow p-6 border border-gray-200">
+        {% for key, _type, label in fields %}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="f_{{ key }}">{{ label }}</label>
+            <input type="text" id="f_{{ key }}" name="{{ key }}" value="{{ config[key] }}"
+                   class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-picl-500 focus:ring-picl-500">
+            <div class="text-xs text-gray-500 mt-1">key: <code>{{ key }}</code></div>
+        </div>
+        {% endfor %}
+
+        <div class="pt-2 border-t border-gray-200">
+            <div class="text-sm font-semibold text-gray-700 mb-2">Readiness thresholds (percentile)</div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Ready at ≥</label>
+                    <input type="number" name="threshold_ready" value="{{ thresholds.ready }}"
+                           class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Competitive at ≥</label>
+                    <input type="number" name="threshold_competitive" value="{{ thresholds.competitive }}"
+                           class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                </div>
+            </div>
+        </div>
+
+        <div class="pt-4">
+            <button type="submit" class="bg-picl-700 hover:bg-picl-800 text-white font-semibold px-4 py-2 rounded-md">Save</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

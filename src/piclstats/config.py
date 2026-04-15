@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     scrape_delay_seconds: float = 1.5
     request_timeout_seconds: float = 30.0
     log_level: str = "INFO"
+    admin_password: str = ""
 
     model_config = {"env_prefix": "PICLSTATS_", "env_file": ".env"}
 

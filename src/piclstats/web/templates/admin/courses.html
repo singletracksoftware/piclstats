@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Courses — Admin{% endblock %}
+{% block content %}
+<div class="max-w-3xl">
+    <div class="mb-4"><a href="/admin" class="text-sm text-picl-700 hover:underline">&larr; Admin</a></div>
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">Courses</h1>
+
+    <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-700">
+                <tr>
+                    <th class="text-left px-4 py-2">Name</th>
+                    <th class="text-left px-4 py-2">Location</th>
+                    <th class="text-right px-4 py-2">Distance (mi)</th>
+                    <th class="text-right px-4 py-2">Elevation (ft)</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for c in courses %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2">
+                        <a href="/admin/courses/{{ c.id }}" class="text-picl-700 hover:underline font-medium">{{ c.name }}</a>
+                    </td>
+                    <td class="px-4 py-2 text-gray-600">{{ c.location or '—' }}</td>
+                    <td class="px-4 py-2 text-right text-gray-600">{{ c.distance_miles or '—' }}</td>
+                    <td class="px-4 py-2 text-right text-gray-600">{{ c.elevation_ft or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -127,6 +127,14 @@ division_laps = Table(
     Index("idx_div_laps_course", "course_id"),
 )
 
+settings = Table(
+    "settings",
+    metadata,
+    Column("key", Text, primary_key=True),
+    Column("value", JSONB, nullable=False),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+)
+
 rider_aliases = Table(
     "rider_aliases",
     metadata,
