@@ -175,23 +175,33 @@ class StatisticalForecastModel:
         adjusted_pace = max(adjusted_pace, 1.0)  # sanity floor
 
         # Step 5: Place in target distribution
+        #
+        # The pace pool contains every finish across all events (often hundreds
+        # of samples), but a real race has ~typical_field riders. We convert
+        # pool position → percentile → projected place within typical_field,
+        # so a rider at the 40th percentile shows as place ~24/40 rather than
+        # being clamped to "last of 40" just because the pool is large.
         sorted_paces = sorted(inp.target_paces)
-        position = bisect.bisect_left(sorted_paces, adjusted_pace)
         field_size = len(sorted_paces)
         typical_field = round(mean(inp.target_field_sizes)) if inp.target_field_sizes else field_size
 
-        predicted_place = position + 1
+        def _place_from_pace(p: float) -> int:
+            pos = bisect.bisect_left(sorted_paces, p)
+            scaled = round((pos / max(field_size, 1)) * typical_field) + 1
+            return max(1, min(typical_field, scaled))
+
+        position = bisect.bisect_left(sorted_paces, adjusted_pace)
         percentile = round((1 - position / max(field_size, 1)) * 100, 1)
+        predicted_place = _place_from_pace(adjusted_pace)
 
         # Confidence band based on rider's variance
         rider_paces = [o.min_per_mile for o in inp.observations]
         rider_std = stdev(rider_paces) if len(rider_paces) >= 2 else 0
-        # Map stdev to place range: find how many places ±1 stdev covers
         low_pace = adjusted_pace - rider_std
         high_pace = adjusted_pace + rider_std
-        place_low = max(1, bisect.bisect_left(sorted_paces, low_pace) + 1)
-        place_high = min(typical_field, bisect.bisect_left(sorted_paces, high_pace) + 1)
-        place_mid = max(1, min(typical_field, predicted_place))
+        place_low = _place_from_pace(low_pace)
+        place_high = _place_from_pace(high_pace)
+        place_mid = predicted_place
 
         # Ensure low <= mid <= high
         place_low = min(place_low, place_mid)
@@ -206,11 +216,11 @@ class StatisticalForecastModel:
         elif percentile >= thresholds["competitive"]:
             readiness = "Competitive"
             readiness_color = "amber"
-            readiness_detail = f"Would be competitive but likely in the bottom half — place ~{place_mid} out of ~{typical_field}"
+            readiness_detail = f"Would be competitive but likely in the bottom half — place {place_low}-{place_high} out of ~{typical_field}"
         else:
             readiness = "Developing"
             readiness_color = "red"
-            readiness_detail = f"May find it challenging — projected place ~{place_mid} out of ~{typical_field}"
+            readiness_detail = f"May find it challenging — projected place {place_low}-{place_high} out of ~{typical_field}"
 
         # Confidence level
         if len(inp.observations) >= 5 and len(sorted_paces) >= 20:

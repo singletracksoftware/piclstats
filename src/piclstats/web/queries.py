@@ -33,6 +33,35 @@ _CANONICAL_CTE = """
     )
 """
 
+# SQL fragments for deriving pace from actual completed laps rather than the
+# generic division_laps.lap_count (which is often wrong for state championships
+# and any event where the declared lap count diverged from the field's real
+# laps). Paired with a consistency gate: only trust the result if the sum of
+# recorded lap splits matches total_time within 10 seconds.
+_ACTUAL_LAPS = """
+    (CASE WHEN r.lap1 IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN r.lap2 IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN r.lap3 IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN r.lap4 IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN r.lap5 IS NOT NULL THEN 1 ELSE 0 END
+   + CASE WHEN r.lap6 IS NOT NULL THEN 1 ELSE 0 END)
+"""
+_SUM_LAPS = """
+    (COALESCE(r.lap1,'0'::interval) + COALESCE(r.lap2,'0'::interval)
+   + COALESCE(r.lap3,'0'::interval) + COALESCE(r.lap4,'0'::interval)
+   + COALESCE(r.lap5,'0'::interval) + COALESCE(r.lap6,'0'::interval))
+"""
+_LAPS_CONSISTENT = f"""
+    ({_ACTUAL_LAPS} > 0
+     AND abs(EXTRACT(EPOCH FROM (r.total_time - {_SUM_LAPS}))) < 10)
+"""
+
+# Sanity guardrail: MTB pace outside this range is physiologically implausible
+# and usually signals bad loop distance data (e.g. rally events on short tracks
+# where the default 2.0/3.5 mi loop distance doesn't apply).
+_PACE_MIN = 3.5
+_PACE_MAX = 15.0
+
 
 def overview_stats(session: Session) -> dict:
     row = session.execute(text(f"""
@@ -149,7 +178,7 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
         ORDER BY from_season
     """), {"ids": all_ids}).all()
 
-    races = session.execute(text("""
+    races = session.execute(text(f"""
         SELECT
             e.season,
             e.event_name,
@@ -171,11 +200,11 @@ def rider_detail(session: Session, rider_id: int) -> dict | None:
             cl.distance_miles AS loop_distance,
             CASE WHEN r.total_time IS NOT NULL
                       AND r.total_time < interval '2 hours'
-                      AND dl.lap_count > 0
                       AND cl.distance_miles > 0
+                      AND {_LAPS_CONSISTENT}
                  THEN round((
                      (EXTRACT(EPOCH FROM r.total_time) / 60.0)
-                     / (dl.lap_count * cl.distance_miles)
+                     / ({_ACTUAL_LAPS} * cl.distance_miles)
                  )::numeric, 1)
             END AS min_per_mile
         FROM results r
@@ -511,12 +540,12 @@ def course_detail(session: Session, course_id: int, season: int | None = None) -
                round(avg(EXTRACT(EPOCH FROM r.total_time))::numeric, 1) AS avg_time_secs,
                min(r.total_time) AS fastest_time,
                round(avg(
-                   EXTRACT(EPOCH FROM r.total_time) / NULLIF(dl.lap_count, 0)
-               )::numeric, 1) AS avg_pace_per_lap_secs,
+                   EXTRACT(EPOCH FROM r.total_time) / NULLIF({_ACTUAL_LAPS}, 0)
+               ) FILTER (WHERE {_LAPS_CONSISTENT})::numeric, 1) AS avg_pace_per_lap_secs,
                round(avg(
                    (EXTRACT(EPOCH FROM r.total_time) / 60.0)
-                   / NULLIF(dl.lap_count * cl.distance_miles, 0)
-               )::numeric, 1) AS avg_min_per_mile
+                   / NULLIF({_ACTUAL_LAPS} * cl.distance_miles, 0)
+               ) FILTER (WHERE {_LAPS_CONSISTENT} AND cl.distance_miles > 0)::numeric, 1) AS avg_min_per_mile
         FROM results r
         JOIN events e ON r.event_id = e.id
         JOIN riders ri ON r.rider_id = ri.id
@@ -606,7 +635,7 @@ def rider_forecast_data(session: Session, rider_id: int) -> dict | None:
     if not info:
         return None
 
-    races = session.execute(text("""
+    races = session.execute(text(f"""
         SELECT
             e.event_name,
             e.course_id,
@@ -619,11 +648,11 @@ def rider_forecast_data(session: Session, rider_id: int) -> dict | None:
             cl.distance_miles AS loop_distance,
             CASE WHEN r.total_time IS NOT NULL
                       AND r.total_time < interval '2 hours'
-                      AND dl.lap_count > 0
                       AND cl.distance_miles > 0
+                      AND {_LAPS_CONSISTENT}
                  THEN round((
                      (EXTRACT(EPOCH FROM r.total_time) / 60.0)
-                     / (dl.lap_count * cl.distance_miles)
+                     / ({_ACTUAL_LAPS} * cl.distance_miles)
                  )::numeric, 1)
             END AS min_per_mile,
             CASE WHEN cl.distance_miles > 0 AND cl.elevation_ft IS NOT NULL
@@ -643,15 +672,31 @@ def rider_forecast_data(session: Session, rider_id: int) -> dict | None:
         ORDER BY e.season, e.event_order
     """), {"ids": all_ids}).all()
 
-    # Determine primary division and gender (most recent)
-    valid_races = [r for r in races if r.min_per_mile is not None]
+    # Determine primary division and gender (most recent). Apply the pace
+    # sanity range so rally/short-track events with bad loop distances don't
+    # contaminate the rider's baseline.
+    valid_races = [
+        r for r in races
+        if r.min_per_mile is not None
+        and _PACE_MIN <= float(r.min_per_mile) <= _PACE_MAX
+    ]
     primary_division = valid_races[-1].division if valid_races else None
     gender = valid_races[-1].gender if valid_races else None
+
+    # Null out pace on races outside the sanity range so forecast observations
+    # built from this list never include rally/short-track outliers.
+    serialized_races = []
+    for r in races:
+        row = _serialize(r._mapping)
+        mpm = row.get("min_per_mile")
+        if mpm is not None and not (_PACE_MIN <= float(mpm) <= _PACE_MAX):
+            row["min_per_mile"] = None
+        serialized_races.append(row)
 
     return {
         "info": _serialize(info._mapping),
         "canonical_id": canonical_id,
-        "races": [_serialize(r._mapping) for r in races],
+        "races": serialized_races,
         "primary_division": primary_division,
         "gender": gender,
     }
@@ -678,7 +723,7 @@ def division_pace_distribution(
             count(*) OVER (PARTITION BY r.event_id) AS field_size,
             round((
                 (EXTRACT(EPOCH FROM r.total_time) / 60.0)
-                / NULLIF(dl.lap_count * cl.distance_miles, 0)
+                / NULLIF({_ACTUAL_LAPS} * cl.distance_miles, 0)
             )::numeric, 1) AS min_per_mile
         FROM results r
         JOIN events e ON r.event_id = e.id
@@ -691,14 +736,19 @@ def division_pace_distribution(
         WHERE {div_filter}
           AND r.gender = :gender
           AND r.place IS NOT NULL
+          AND r.status = 'OK'
           AND r.total_time IS NOT NULL
           AND r.total_time < interval '2 hours'
-          AND dl.lap_count > 0 AND cl.distance_miles > 0
+          AND cl.distance_miles > 0
+          AND {_LAPS_CONSISTENT}
           {season_filter}
         ORDER BY min_per_mile
     """), params).all()
 
-    paces = [float(r[2]) for r in rows if r[2] is not None]
+    paces = [
+        float(r[2]) for r in rows
+        if r[2] is not None and _PACE_MIN <= float(r[2]) <= _PACE_MAX
+    ]
     field_sizes = list({r[1] for r in rows if r[1]})
 
     return {"paces": paces, "field_sizes": field_sizes}
